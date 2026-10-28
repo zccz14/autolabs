@@ -3,7 +3,7 @@
 **托管的研究流水线。** 一个项目就是一族 `<Domain>-Labs`：它有 owner、有自己的授权、有自己的实验编号序列，还有一本 SOTA 账。实验文件由 AutoLabs 自己托管，计算发生在你自己的机器上——由 [Cybion](https://cybion.ntnl.io) 的 Thread 驱动。
 
 - 线上：**https://autolabs.ntnl.io**
-- 设计：[流水线](docs/pipeline.md) · [架构](docs/architecture.md) · [指标口径与数据集](docs/metrics-and-datasets.md) · [为什么丢掉 GitHub](docs/decisions/0001-experiment-files-in-autolabs.md)
+- 设计：[流水线](docs/pipeline.md) · [架构](docs/architecture.md) · [指标口径与数据集](docs/metrics-and-datasets.md) · [为什么丢掉 GitHub](docs/decisions/0001-experiment-files-in-autolabs.md) · [Q-Labs 迁移](docs/q-labs-migration.md)
 
 ## 它解决什么
 
