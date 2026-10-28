@@ -1,0 +1,46 @@
+{
+  "name": "autolabs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test",
+    "dev": "wrangler dev --config wrangler.jsonc --port 8787",
+    "preview": "vite",
+    "db:migrate:local": "wrangler d1 migrations apply autolabs --local --config wrangler.jsonc",
+    "db:migrate": "wrangler d1 migrations apply autolabs --remote --config wrangler.jsonc",
+    "deploy": "pnpm build && wrangler deploy --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@tanstack/react-query": "^5.102.8",
+    "@zccz14/ux": "^0.3.0",
+    "auth-mini-react-components": "^0.6.10",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.2.6",
+    "hono": "^4.13.14",
+    "jose": "^6.2.13",
+    "linkit-react-components": "^0.6.3",
+    "lucide-react": "^1.42.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.18.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261025.1",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~6.0.0",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.5",
+    "wrangler": "4.152.0"
+  }
+}

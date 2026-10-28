@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "autolabs",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-25",
+  "observability": { "enabled": true },
+
+  // 单源部署：SPA 静态产物挂在同一个 Worker 上，/api 与页面同域，没有跨域与版本错配。
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "none"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "autolabs",
+      "database_id": "d15440ca-6a1e-4d4f-afb2-228061bffb5a",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // 实验文件的内容寻址存储：键就是 sha256，跨项目去重。
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "autolabs-blobs" }],
+
+  "vars": {
+    "AUTH_ISSUER": "https://auth.ntnl.io",
+    "AUTH_AUDIENCE": "autolabs.ntnl.io"
+  },
+
+  "routes": [{ "pattern": "autolabs.ntnl.io", "custom_domain": true }],
+
+  // 对账器：只做救援，不做主循环。任何 run 都不允许永远停在 dispatched。
+  "triggers": { "crons": ["*/15 * * * *"] }
+}
