@@ -5,6 +5,7 @@ import { authenticate, type Principal } from './auth';
 import projectRoutes from './routes/projects';
 import { projectSnapshotRoutes, snapshotRoutes } from './routes/snapshots';
 import { projectRunRoutes, runRoutes } from './routes/runs';
+import { firmamentRoutes, projectMetricRoutes } from './routes/metrics';
 
 type Variables = { principal: Principal };
 
@@ -22,6 +23,8 @@ app.get('/api/v1/me', async (c) => {
 app.route('/api/v1/projects', projectRoutes);
 app.route('/api/v1/projects', projectSnapshotRoutes);
 app.route('/api/v1/projects', projectRunRoutes);
+app.route('/api/v1/projects', projectMetricRoutes);
+app.route('/api/v1/firmament', firmamentRoutes);
 app.route('/api/v1/snapshots', snapshotRoutes);
 app.route('/api/v1/runs', runRoutes);
 

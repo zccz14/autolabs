@@ -9,6 +9,7 @@ import {
   allocateLabNo,
   findProjectById,
   findRun,
+  currentMetrics,
   latestSnapshot,
   listRuns,
   listSotaEvents,
@@ -16,6 +17,7 @@ import {
   snapshotEntries,
   type RunRow,
 } from '../store';
+import { matchMetrics } from '../metrics';
 import { viewRun } from './projects';
 import { blobKey } from './snapshots';
 
@@ -47,9 +49,9 @@ projectRunRoutes.post('/:slug/runs', async (c) => {
   const createdAt = nowSeconds();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO runs (id, project_id, lab_no, external_ref, state, input_snapshot_id, note, created_by, created_at)
-       VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`,
-    ).bind(id, access.project.id, labNo, ref, inputSnapshotId, note, principal.userId, createdAt),
+      `INSERT INTO runs (id, project_id, lab_no, external_ref, state, input_snapshot_id, dataset_pin_id, note, created_by, created_at)
+       VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?)`,
+    ).bind(id, access.project.id, labNo, ref, inputSnapshotId, access.project.dataset_pin_id, note, principal.userId, createdAt),
     c.env.DB.prepare(`INSERT INTO events (id, project_id, kind, payload, actor_user_id, created_at) VALUES (?, ?, 'run.proposed', ?, ?, ?)`).bind(
       newId('evt'),
       access.project.id,
@@ -77,8 +79,17 @@ projectRunRoutes.get('/:slug/leaderboard', async (c) => {
       settled_at: run.settled_at,
       sota: access.project.sota_run_id === run.id,
     }));
+  const definitions = await currentMetrics(c.env, access.project.id);
   return c.json({
     project: { slug: access.project.slug, name: access.project.name, sota_run_id: access.project.sota_run_id },
+    metrics: definitions.map((definition) => ({
+      key: definition.key,
+      label: definition.label,
+      unit: definition.unit,
+      direction: definition.direction,
+      is_primary: Boolean(definition.is_primary),
+      version: definition.version,
+    })),
     leaderboard: ranked,
     excluded: runs
       .filter((run) => run.state === 'rejected')
@@ -165,6 +176,19 @@ runRoutes.post('/:runId/verdict', async (c) => {
       evidence: typeof record.evidence === 'string' ? record.evidence : null,
     };
   });
+  const definitions = await currentMetrics(c.env, access.project.id);
+  const reportedMetrics =
+    payload.metrics && typeof payload.metrics === 'object' && !Array.isArray(payload.metrics)
+      ? (payload.metrics as Record<string, unknown>)
+      : null;
+  const { metricSet, unknown } = matchMetrics(definitions, reportedMetrics);
+  if (definitions.length > 0 && unknown.length > 0) {
+    return fail(
+      400,
+      'unknown_metric',
+      `项目没有定义这些指标：${unknown.join(', ')}。先在项目的「指标」里定义口径，再上报。`,
+    );
+  }
   const report = optionalString(payload.report_md, 'report_md', 200000) ?? null;
   const metrics = payload.metrics ?? null;
   if (metrics !== null && (typeof metrics !== 'object' || Array.isArray(metrics))) {
@@ -212,12 +236,13 @@ runRoutes.post('/:runId/verdict', async (c) => {
   const allPass = normalized.every((gate) => gate.pass);
   const state = allPass ? 'frozen' : 'rejected';
   await c.env.DB.prepare(
-    `UPDATE runs SET state = ?, gates_json = ?, metrics_json = ?, report_md = ?, output_snapshot_id = ?, settled_at = ? WHERE id = ?`,
+    `UPDATE runs SET state = ?, gates_json = ?, metrics_json = ?, metric_set_json = ?, report_md = ?, output_snapshot_id = ?, settled_at = ? WHERE id = ?`,
   )
     .bind(
       state,
       JSON.stringify(normalized),
       metrics === null ? null : JSON.stringify(metrics),
+      JSON.stringify(metricSet),
       report,
       outputSnapshotId,
       nowSeconds(),

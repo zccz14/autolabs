@@ -3,7 +3,7 @@
 **托管的研究流水线。** 一个项目就是一族 `<Domain>-Labs`：它有 owner、有自己的授权、有自己的实验编号序列，还有一本 SOTA 账。实验文件由 AutoLabs 自己托管，计算发生在你自己的机器上——由 [Cybion](https://cybion.ntnl.io) 的 Thread 驱动。
 
 - 线上：**https://autolabs.ntnl.io**
-- 设计：[流水线](docs/pipeline.md) · [架构](docs/architecture.md) · [为什么丢掉 GitHub](docs/decisions/0001-experiment-files-in-autolabs.md)
+- 设计：[流水线](docs/pipeline.md) · [架构](docs/architecture.md) · [指标口径与数据集](docs/metrics-and-datasets.md) · [为什么丢掉 GitHub](docs/decisions/0001-experiment-files-in-autolabs.md)
 
 ## 它解决什么
 
@@ -24,6 +24,8 @@ AutoLabs 把这些变成类型：编号不可重复、快照不可变、冻结�
 | **Run** | 一轮实验：`lab-0007`，编号由项目原子分配、永不复用 |
 | **Gate** | `{rule_id, pass, evidence}`，全过才 `frozen`，否则 `rejected` |
 | **SOTA event** | `promote / demote / exclude` + 理由 + 操作者 |
+| **Metric** | 项目级指标契约：key + 单位 + 方向 + **口径说明** + 版本（只追加） |
+| **Dataset pin** | 引用 Firmament 定义的数据集，钉住 manifest 摘要（[详见](docs/metrics-and-datasets.md)） |
 
 一轮的生命周期：
 
@@ -73,7 +75,11 @@ curl -sX PUT --data-binary @outputs/canonical.txt \
 | `GET` `POST` | `/api/v1/projects/{slug}/runs` | 实验列表 / 开新一轮 |
 | `POST` | `/api/v1/runs/{id}/dispatch` | 绑定 Cybion Thread |
 | `POST` | `/api/v1/runs/{id}/verdict` | 上报门禁与指标（判定权在平台） |
-| `GET` | `/api/v1/projects/{slug}/leaderboard` | 榜单 |
+| `GET` `POST` | `/api/v1/projects/{slug}/metrics` | 指标契约（每次写入 = 新版本） |
+| `POST` | `/api/v1/projects/{slug}/metrics/{key}/retire` | 退役一个指标 |
+| `GET` `POST` | `/api/v1/projects/{slug}/dataset` | 当前数据集 pin / 绑定新 pin |
+| `GET` | `/api/v1/firmament/datasets` | Firmament 数据集目录（token 透传） |
+| `GET` | `/api/v1/projects/{slug}/leaderboard` | 榜单（带指标定义与顺序） |
 | `POST` | `/api/v1/projects/{slug}/sota` | 晋升 / 降级 / 排除 |
 
 ## 本地开发
@@ -100,6 +106,7 @@ pnpm deploy                    # 构建 + wrangler deploy，绑定 autolabs.ntnl
 ## 状态
 
 Phase 1（已上线）：项目实体与授权、内容寻址存储、快照与冻结、run 与门禁、SOTA 账本、榜单、对账器。
+Phase 1.5（已上线）：项目级指标契约（带口径、版本化、上报强校验）、Firmament 数据集 pin。
 
 Phase 2（未开始）：Workflows 主循环、Durable Object 推送、Diff 页、Linkit 通知、residuals。
 

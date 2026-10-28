@@ -13,6 +13,7 @@ export interface ProjectRow {
   lab_seq: number;
   sota_run_id: string | null;
   rules_snapshot_id: string | null;
+  dataset_pin_id: string | null;
   created_at: number;
 }
 
@@ -43,6 +44,8 @@ export interface RunRow {
   state: RunState;
   input_snapshot_id: string;
   output_snapshot_id: string | null;
+  dataset_pin_id: string | null;
+  metric_set_json: string | null;
   cybion_thread_id: string | null;
   note: string;
   report_md: string | null;
@@ -124,6 +127,7 @@ export async function createProject(
       createdAt,
     ),
   ]);
+  await seedMetrics(env, id, input.ownerUserId);
   const created = await findProjectById(env, id);
   if (!created) throw new Error('项目创建失败');
   return created;
@@ -206,4 +210,75 @@ export async function listSotaEvents(env: Env, projectId: string, limit = 50): P
     .bind(projectId, limit)
     .all<SotaEvent>();
   return result.results ?? [];
+}
+
+export interface DatasetPinRow {
+  id: string;
+  project_id: string;
+  firmament_dataset_id: string;
+  name: string;
+  digest: string;
+  file_count: number;
+  bytes: number;
+  manifest_key: string | null;
+  verified: number;
+  note: string;
+  pinned_by: string;
+  pinned_at: number;
+}
+
+/** 当前生效的指标：每个 key 取最大版本，且未被退役。 */
+export async function currentMetrics(env: Env, projectId: string): Promise<MetricRow[]> {
+  const result = await env.DB.prepare(
+    `SELECT m.* FROM project_metrics m
+       JOIN (SELECT key, MAX(version) AS v FROM project_metrics WHERE project_id = ? GROUP BY key) latest
+         ON latest.key = m.key AND latest.v = m.version
+      WHERE m.project_id = ? AND m.retired_at IS NULL
+      ORDER BY m.sort_order, m.key`,
+  )
+    .bind(projectId, projectId)
+    .all<MetricRow>();
+  return result.results ?? [];
+}
+
+export interface MetricRow {
+  id: string;
+  project_id: string;
+  key: string;
+  version: number;
+  label: string;
+  unit: string;
+  direction: 'higher-better' | 'lower-better' | 'neutral';
+  definition_md: string;
+  is_primary: number;
+  sort_order: number;
+  created_by: string;
+  created_at: number;
+  retired_at: number | null;
+}
+
+/** 新建项目时种入指标模板：让"口径"从第一天就有内容可改。 */
+export async function seedMetrics(env: Env, projectId: string, userId: string): Promise<void> {
+  const { METRIC_TEMPLATE } = await import('./metrics');
+  const createdAt = nowSeconds();
+  await env.DB.batch(
+    METRIC_TEMPLATE.map((metric) =>
+      env.DB.prepare(
+        `INSERT INTO project_metrics (id, project_id, key, version, label, unit, direction, definition_md, is_primary, sort_order, created_by, created_at)
+         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        newId('met'),
+        projectId,
+        metric.key,
+        metric.label,
+        metric.unit,
+        metric.direction,
+        metric.definition_md,
+        metric.is_primary ? 1 : 0,
+        metric.sort_order,
+        userId,
+        createdAt,
+      ),
+    ),
+  );
 }

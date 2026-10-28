@@ -6,6 +6,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Empty, ErrorNote, Section, StatePill, when } from '../ui';
 import { useCopy } from '../copy';
+import { DatasetPanel } from './dataset-panel';
+import { MetricsPanel } from './metrics-panel';
 import {
   downloadSnapshot,
   useCreateRun,
@@ -15,7 +17,7 @@ import {
   type SdkLike,
 } from '../api';
 
-type Tab = 'runs' | 'leaderboard' | 'snapshots';
+type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots';
 
 export function ProjectPage() {
   const t = useCopy();
@@ -79,9 +81,9 @@ export function ProjectPage() {
       </div>
 
       <nav className="flex gap-2">
-        {(['runs', 'leaderboard', 'snapshots'] as Tab[]).map((value) => (
+        {(['runs', 'leaderboard', 'metrics', 'dataset', 'snapshots'] as Tab[]).map((value) => (
           <Button key={value} size="sm" variant={tab === value ? 'default' : 'outline'} onClick={() => setTab(value)}>
-            {t(`label.${value}` as 'label.runs' | 'label.leaderboard' | 'label.snapshots')}
+            {labelForTab(value, t)}
           </Button>
         ))}
       </nav>
@@ -153,6 +155,10 @@ export function ProjectPage() {
           )}
         </Section>
       ) : null}
+
+      {tab === 'metrics' ? <MetricsPanel sdk={typed} slug={slug} onChanged={() => detail.refetch()} /> : null}
+
+      {tab === 'dataset' ? <DatasetPanel sdk={typed} slug={slug} onChanged={() => detail.refetch()} /> : null}
 
       {tab === 'snapshots' ? (
         snapshots.length === 0 ? (
@@ -232,6 +238,14 @@ export function ProjectPage() {
       ) : null}
     </div>
   );
+}
+
+function labelForTab(tab: Tab, t: (key: 'label.runs' | 'label.leaderboard' | 'label.metricsTab' | 'label.datasetTab' | 'label.snapshots') => string) {
+  if (tab === 'metrics') return t('label.metricsTab');
+  if (tab === 'dataset') return t('label.datasetTab');
+  if (tab === 'leaderboard') return t('label.leaderboard');
+  if (tab === 'snapshots') return t('label.snapshots');
+  return t('label.runs');
 }
 
 function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
