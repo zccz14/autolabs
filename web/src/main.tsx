@@ -15,7 +15,7 @@ createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthMiniProvider
       authMiniBaseUrl="https://auth.ntnl.io"
-      audiences={['autolabs.ntnl.io', 'linkit.ntnl.io']}
+      audiences={['autolabs.ntnl.io', 'linkit.ntnl.io', 'firma.ntnl.io']}
       autoRedirectToLogin
     >
       <LinkitProvider linkitBaseUrl="https://linkit.ntnl.io" lang="zh-CN">

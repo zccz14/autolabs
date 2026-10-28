@@ -71,3 +71,21 @@ export function diffSnapshots(
   diff.changed.sort();
   return diff;
 }
+
+/** 数据集 manifest 的身份：对排序后的 `path\0sha\0size` 求 sha256。 */
+export async function manifestDigest(entries: { path: string; sha256: string; size: number }[]): Promise<string> {
+  const canonical = [...entries]
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    .map((entry) => `${entry.path}\u0000${entry.sha256}\u0000${entry.size}`)
+    .join('\n');
+  return sha256Hex(canonical);
+}
+
+/** 指标键：小写字母开头，只允许小写字母、数字、下划线。 */
+const METRIC_KEY_RE = /^[a-z][a-z0-9_]{1,40}$/;
+
+export function assertMetricKey(key: string): void {
+  if (!METRIC_KEY_RE.test(key)) {
+    throw new Error(`非法指标键：${key}（要求小写字母开头，仅含小写字母/数字/下划线，2-41 字符）`);
+  }
+}

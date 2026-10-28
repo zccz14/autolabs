@@ -41,15 +41,29 @@ SNAPSHOT_ID=$(python3 -c "import json,sys;print(json.load(open('$TMP/snapshot.js
 step "manifest"
 curl -s --max-time 30 "${AUTH[@]}" "$BASE/api/v1/snapshots/$SNAPSHOT_ID/manifest"; echo
 
+step "metrics contract"
+curl -s --max-time 30 "${AUTH[@]}" "$BASE/api/v1/projects/$SLUG/metrics" | head -c 300; echo
+
+step "bind a dataset pin (offline in local dev)"
+curl -s --max-time 30 "${AUTH[@]}" "${JSON[@]}" -X POST "$BASE/api/v1/projects/$SLUG/dataset" \
+  -d '{"dataset_id":"smoke-feed","note":"冒烟用"}' | head -c 300; echo
+
 step "open run"
 curl -s --max-time 30 "${AUTH[@]}" "${JSON[@]}" -X POST "$BASE/api/v1/projects/$SLUG/runs" -d '{"note":"冒烟"}' | tee "$TMP/run.json"; echo
 RUN_ID=$(python3 -c "import json;print(json.load(open('$TMP/run.json'))['run']['id'])")
 LAB=$(python3 -c "import json;print(json.load(open('$TMP/run.json'))['run']['lab'])")
 REF=$(python3 -c "import json;print(json.load(open('$TMP/run.json'))['run']['external_ref'])")
 test "$REF" = "autolabs:${SLUG}:${LAB}" || { echo "external_ref 不符合预期：$REF"; exit 1; }
+PINNED=$(python3 -c "import json;print(json.load(open('$TMP/run.json'))['run']['dataset_pin_id'])")
+test "$PINNED" != "None" || { echo "run 没有钉住数据集 pin"; exit 1; }
 
 step "dispatch to a Cybion thread"
 curl -s --max-time 30 "${AUTH[@]}" "${JSON[@]}" -X POST "$BASE/api/v1/runs/$RUN_ID/dispatch" -d '{"cybion_thread_id":"thr_smoke"}' >/dev/null
+
+step "an undefined metric must be refused"
+CODE=$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' "${AUTH[@]}" "${JSON[@]}" -X POST "$BASE/api/v1/runs/$RUN_ID/verdict" \
+  -d '{"gates":[{"rule_id":"x","pass":true}],"metrics":{"win_rate":0.9}}')
+test "$CODE" = "400" || { echo "期望 400，实际 $CODE"; exit 1; }
 
 step "verdict (all gates pass)"
 curl -s --max-time 30 "${AUTH[@]}" "${JSON[@]}" -X POST "$BASE/api/v1/runs/$RUN_ID/verdict" -d '{
@@ -57,7 +71,7 @@ curl -s --max-time 30 "${AUTH[@]}" "${JSON[@]}" -X POST "$BASE/api/v1/runs/$RUN_
     {"rule_id":"no-future-leak","pass":true,"evidence":"causal execution audit"},
     {"rule_id":"canonical-byte-equal","pass":true,"evidence":"逐字节一致"}
   ],
-  "metrics":{"trades":1234,"sharpe":1.4},"report_md":"## 结论\n冒烟通过"
+  "metrics":{"trades":1234,"sharpe":1.4,"cumulative_return":0.31},"report_md":"## 结论\n冒烟通过"
 }' | tee "$TMP/verdict.json" | head -c 400; echo
 STATE=$(python3 -c "import json;print(json.load(open('$TMP/verdict.json'))['run']['state'])")
 test "$STATE" = "frozen" || { echo "期望 frozen，实际 $STATE"; exit 1; }

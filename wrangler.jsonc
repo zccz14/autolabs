@@ -27,7 +27,8 @@
 
   "vars": {
     "AUTH_ISSUER": "https://auth.ntnl.io",
-    "AUTH_AUDIENCE": "autolabs.ntnl.io"
+    "AUTH_AUDIENCE": "autolabs.ntnl.io",
+    "FIRMAMENT_BASE_URL": "https://firma.ntnl.io"
   },
 
   "routes": [{ "pattern": "autolabs.ntnl.io", "custom_domain": true }],

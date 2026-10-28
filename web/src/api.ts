@@ -65,6 +65,40 @@ export interface ProjectSummary {
   role: string;
 }
 
+export interface MetricView {
+  key: string;
+  version: number;
+  label: string;
+  unit: string;
+  direction: 'higher-better' | 'lower-better' | 'neutral';
+  definition_md: string;
+  is_primary: boolean;
+  sort_order: number;
+}
+
+export interface DatasetPinView {
+  id: string;
+  dataset_id: string;
+  name: string;
+  digest: string;
+  file_count: number;
+  bytes: number;
+  verified: boolean;
+  note: string;
+  pinned_by: string;
+  pinned_at: number;
+}
+
+export interface FirmamentDatasetView {
+  id: string;
+  name: string;
+  description: string;
+  tier: string;
+  file_count: number;
+  bytes: number;
+  updated_at: number;
+}
+
 export interface RunView {
   id: string;
   lab_no: number;
@@ -73,6 +107,8 @@ export interface RunView {
   state: 'proposed' | 'dispatched' | 'running' | 'evaluating' | 'frozen' | 'rejected' | 'lost';
   input_snapshot_id: string;
   output_snapshot_id: string | null;
+  dataset_pin_id: string | null;
+  metric_set: { key: string; version: number }[];
   cybion_thread_id: string | null;
   note: string;
   report_md: string | null;
@@ -93,7 +129,12 @@ export interface SnapshotView {
 }
 
 export interface ProjectDetail {
-  project: ProjectSummary & { run_count: number; snapshot_count: number; rules_snapshot_id: string | null };
+  project: ProjectSummary & {
+    run_count: number;
+    snapshot_count: number;
+    rules_snapshot_id: string | null;
+    dataset_pin_id: string | null;
+  };
   runs: RunView[];
   snapshots: SnapshotView[];
   sota_events: { id: string; run_id: string; action: string; reason: string; actor_user_id: string; created_at: number }[];
@@ -220,4 +261,70 @@ export async function downloadSnapshot(sdk: SdkLike, projectSlug: string, snapsh
   anchor.download = `${projectSlug}-${snapshotId}.tar.gz`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+export function useMetrics(sdk: SdkLike | null, slug: string | undefined) {
+  return useQuery({
+    queryKey: ['metrics', slug],
+    enabled: Boolean(sdk && slug),
+    queryFn: ({ signal }) => api<{ metrics: MetricView[] }>(sdk as SdkLike, `/api/v1/projects/${slug}/metrics`, { signal }),
+  });
+}
+
+export function useUpsertMetric(sdk: SdkLike | null, slug: string) {
+  return useMutation({
+    mutationFn: (input: {
+      key: string;
+      label: string;
+      unit: string;
+      direction: string;
+      definition_md: string;
+      is_primary?: boolean;
+      sort_order?: number;
+    }) =>
+      api<{ metrics: MetricView[] }>(sdk as SdkLike, `/api/v1/projects/${slug}/metrics`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useRetireMetric(sdk: SdkLike | null, slug: string) {
+  return useMutation({
+    mutationFn: (key: string) =>
+      api<{ metrics: MetricView[] }>(sdk as SdkLike, `/api/v1/projects/${slug}/metrics/${key}/retire`, { method: 'POST' }),
+  });
+}
+
+export function useDataset(sdk: SdkLike | null, slug: string | undefined) {
+  return useQuery({
+    queryKey: ['dataset', slug],
+    enabled: Boolean(sdk && slug),
+    queryFn: ({ signal }) =>
+      api<{ firmament_enabled: boolean; current: DatasetPinView | null; pins: DatasetPinView[] }>(
+        sdk as SdkLike,
+        `/api/v1/projects/${slug}/dataset`,
+        { signal },
+      ),
+  });
+}
+
+export function usePinDataset(sdk: SdkLike | null, slug: string) {
+  return useMutation({
+    mutationFn: (input: { dataset_id: string; note: string }) =>
+      api<{ pin: DatasetPinView | null }>(sdk as SdkLike, `/api/v1/projects/${slug}/dataset`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useFirmamentDatasets(sdk: SdkLike | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['firmament-datasets'],
+    enabled: Boolean(sdk && enabled),
+    retry: false,
+    queryFn: ({ signal }) =>
+      api<{ enabled: boolean; datasets: FirmamentDatasetView[] }>(sdk as SdkLike, '/api/v1/firmament/datasets', { signal }),
+  });
 }
