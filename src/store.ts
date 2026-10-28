@@ -159,6 +159,21 @@ export async function findRunByExternalRef(env: Env, ref: string): Promise<RunRo
   return env.DB.prepare(`SELECT * FROM runs WHERE external_ref = ?`).bind(ref).first<RunRow>();
 }
 
+/** 列表是截断的（LIMIT），所以"有多少个"必须单独数，不能用列表长度冒充。 */
+export async function countRuns(env: Env, projectId: string): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM runs WHERE project_id = ?`)
+    .bind(projectId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+export async function countSnapshots(env: Env, projectId: string): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM snapshots WHERE project_id = ?`)
+    .bind(projectId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 export async function listSnapshots(env: Env, projectId: string, limit = 100): Promise<SnapshotRow[]> {
   const result = await env.DB.prepare(`SELECT * FROM snapshots WHERE project_id = ? ORDER BY created_at DESC LIMIT ?`)
     .bind(projectId, limit)
