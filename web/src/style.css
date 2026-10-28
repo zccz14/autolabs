@@ -1,12 +1,15 @@
 @import "tailwindcss";
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
   --color-border: var(--border);
   --color-input: var(--border);
   --color-ring: var(--primary);
   --color-primary: var(--primary);
-  --color-primary-foreground: white;
+  --color-primary-foreground: var(--primary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-secondary: var(--muted);
@@ -15,36 +18,50 @@
   --color-accent-foreground: var(--foreground);
   --color-popover: var(--background);
   --color-popover-foreground: var(--foreground);
-  --color-destructive: #b42318;
+  --color-destructive: var(--destructive);
 }
+
+/*
+ * 主题层：浅色是默认值，深色由 <html> 上的 `.dark` 类切换——@zccz14/ux 与
+ * linkit-react-components 用的就是这个开关。这里绝不能再写
+ * `prefers-color-scheme`，否则外壳跟系统走、页面跟系统走、用户手动切换时只
+ * 有一半会变，出现深色外壳配浅色页面（侧边栏文字几乎不可读）。
+ */
 :root {
+  color-scheme: light;
   --background: #f7f8f5;
   --foreground: #16211f;
+  --card: #ffffff;
   --border: #d8e0dc;
   --primary: #0e7c66;
+  --primary-foreground: #ffffff;
   --muted: #edf2ef;
   --muted-foreground: #5a6b68;
+  --destructive: #b42318;
   --radius: 0.5rem;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--foreground);
   background: var(--background);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f1614;
-    --foreground: #e8efec;
-    --border: #253430;
-    --primary: #3fbfa2;
-    --muted: #17211f;
-    --muted-foreground: #93a5a1;
-  }
+
+.dark {
+  color-scheme: dark;
+  --background: #0f1614;
+  --foreground: #e8efec;
+  --card: #121a18;
+  --border: #253430;
+  --primary: #3fbfa2;
+  --primary-foreground: #06231c;
+  --muted: #17211f;
+  --muted-foreground: #93a5a1;
+  --destructive: #f0938a;
 }
+
 body { margin: 0; }
 * { box-sizing: border-box; }
 button { cursor: pointer; }
 code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
-.card { border: 1px solid var(--border); border-radius: 12px; background: color-mix(in oklab, var(--background), white 55%); }
-@media (prefers-color-scheme: dark) { .card { background: #121a18; } }
+.card { border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
 .grid-cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .kicker { letter-spacing: 0.14em; font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--primary); }
 table.plain { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -56,8 +73,6 @@ pre.block { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; l
 .pill-rejected { color: #b42318; border-color: #f0c2bd; background: #fdeceb; }
 .pill-live { color: #8a5a00; border-color: #eccf92; background: #fdf5e3; }
 .pill-proposed { color: var(--muted-foreground); }
-@media (prefers-color-scheme: dark) {
-  .pill-frozen { background: #13312a; border-color: #1f5c4d; color: #6fd8bb; }
-  .pill-rejected { background: #33191a; border-color: #6b2a26; color: #f0938a; }
-  .pill-live { background: #2f2716; border-color: #6b551f; color: #e8c076; }
-}
+.dark .pill-frozen { background: #13312a; border-color: #1f5c4d; color: #6fd8bb; }
+.dark .pill-rejected { background: #33191a; border-color: #6b2a26; color: #f0938a; }
+.dark .pill-live { background: #2f2716; border-color: #6b551f; color: #e8c076; }
