@@ -77,7 +77,7 @@ export function ProjectPage() {
         <Stat label={t('label.labs')} value={String(project?.lab_seq ?? 0)} />
         <Stat label={t('label.nextLab')} value={project?.next_lab ?? '—'} mono />
         <Stat label={t('label.sota')} value={sotaLab} mono />
-        <Stat label={t('label.snapshots')} value={String(snapshots.length)} />
+        <Stat label={t('label.snapshots')} value={String(project?.snapshot_count ?? snapshots.length)} />
       </div>
 
       <nav className="flex gap-2">

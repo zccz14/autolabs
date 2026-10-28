@@ -6,6 +6,8 @@ import { loadProject, type Access } from '../guards';
 import { nowSeconds } from '../ids';
 import { labLabel } from '../labs';
 import {
+  countRuns,
+  countSnapshots,
   createProject,
   findProjectBySlug,
   listProjectsForUser,
@@ -117,13 +119,15 @@ routes.post('/', async (c) => {
 routes.get('/:slug', async (c) => {
   const principal = await authenticateOptional(c.req.raw, c.env);
   const access = await loadProject(c.env, c.req.param('slug'), principal);
-  const [runs, snapshots, sotaEvents] = await Promise.all([
+  const [runs, snapshots, sotaEvents, runCount, snapshotCount] = await Promise.all([
     listRuns(c.env, access.project.id, 200),
-    listSnapshots(c.env, access.project.id, 50),
+    listSnapshots(c.env, access.project.id, 200),
     listSotaEvents(c.env, access.project.id, 50),
+    countRuns(c.env, access.project.id),
+    countSnapshots(c.env, access.project.id),
   ]);
   return c.json({
-    project: viewProject(access, { run_count: runs.length, snapshot_count: snapshots.length }),
+    project: viewProject(access, { run_count: runCount, snapshot_count: snapshotCount }),
     runs: runs.map(viewRun),
     snapshots: snapshots.map(viewSnapshot),
     sota_events: sotaEvents,
