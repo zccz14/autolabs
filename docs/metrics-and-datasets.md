@@ -12,7 +12,7 @@
 project_metrics
   key            机器键：cumulative_return
   label          人看的名字：累计收益率
-  unit           ratio | count | bps | seconds
+  unit           ratio | count | bps | seconds | number
   direction      higher-better | lower-better | neutral
   definition_md  口径说明：分母、成本、样本外、年化因子、不重叠约束
   version        每次保存 +1
@@ -28,6 +28,17 @@ project_metrics
 4. **必报指标由平台判。** 每次 verdict，平台补一条 `metrics-reported` 门禁：项目里标了 `required` 的指标缺一个（或不是有限数字）就 `pass=false`，run 只能落 `rejected`。同名门禁如果由机器上报，会被平台版本覆盖——门禁可以自报，判定不行。
 
 新建项目会种入一份模板（累计收益率 / 年化收益率 / 最大回撤 / 日收益夏普 / 交易数 / 平均每日交易），六条默认都是**必报**；口径抄自 `Q-Labs` 的 `AGENTS.md`，可以按项目改成自己的。
+
+### 单位决定展示，不决定好坏
+
+| unit | 存什么 | 怎么展示 |
+| --- | --- | --- |
+| `ratio` | 比例，小数（`0.166`） | 乘 100 加百分号（`16.60%`） |
+| `number` | 无量纲数值（`1.93`） | 原样显示（`1.93`） |
+| `count` | 笔数（`1493`） | 整数或两位小数 |
+| `bps` / `seconds` | 基点 / 秒 | 原样 |
+
+夏普是「每单位波动换来多少收益」的倍数，不是比例。它被当 `ratio` 报了整整一轮，榜单上就显示成 `193.22%`——这是把 1.9322 当成 193.22% 的读数错误，不是策略特别好。所以模板里 `sharpe` 的单位是 `number`；已有项目按「只追加」的规矩升一版（`migrations/0004_sharpe_dimensionless.sql`），历史 run 仍然钉着它当时那一版。
 
 ## 二、数据集：由 Firmament 定义，AutoLabs 只钉摘要
 

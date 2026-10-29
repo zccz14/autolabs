@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assertMetricKey, manifestDigest } from '../src/labs';
-import { METRIC_TEMPLATE, matchMetrics, missingRequiredMetrics, validateMetricInput } from '../src/metrics';
+import { METRIC_TEMPLATE, METRIC_UNITS, matchMetrics, missingRequiredMetrics, validateMetricInput } from '../src/metrics';
+import { formatMetricValue } from '../web/src/metrics-format';
 
 describe('manifest digest', () => {
   it('is order independent and sensitive to size and content', async () => {
@@ -105,5 +106,28 @@ describe('必报指标门禁', () => {
 
   it('全报齐就空数组', () => {
     expect(missingRequiredMetrics(definitions, { cumulative_return: 0.3, max_drawdown: -0.1 })).toEqual([]);
+  });
+});
+
+describe('单位', () => {
+  it('夏普这类无量纲指标用 number，而不是 ratio', () => {
+    const sharpe = METRIC_TEMPLATE.find((metric) => metric.key === 'sharpe');
+    expect(sharpe?.unit).toBe('number');
+    for (const metric of METRIC_TEMPLATE) expect(METRIC_UNITS).toContain(metric.unit);
+  });
+
+  it('number 是合法单位，percent 不是', () => {
+    const base = { key: 'sharpe', direction: 'higher-better', definition_md: '按日收益序列计算，无风险利率 0，年化 sqrt(252)。' };
+    expect(() => validateMetricInput({ ...base, unit: 'number' })).not.toThrow();
+    expect(() => validateMetricInput({ ...base, unit: 'percent' })).toThrow();
+  });
+
+  it('ratio 展示成百分比，number 原样展示', () => {
+    expect(formatMetricValue(0.166, 'ratio')).toBe('16.60%');
+    expect(formatMetricValue(1.9322, 'number')).toBe('1.93');
+    expect(formatMetricValue(1.9322, 'number')).not.toContain('%');
+    expect(formatMetricValue(-0.15, 'ratio')).toBe('-15.00%');
+    expect(formatMetricValue(1493, 'count')).toBe('1493');
+    expect(formatMetricValue(Number.NaN, 'number')).toBe('—');
   });
 });

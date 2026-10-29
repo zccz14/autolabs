@@ -45,6 +45,10 @@ export const COPY = {
   'action.bindDataset': { zh: '绑定数据集', en: 'Bind dataset' },
   'empty.metrics': { zh: '还没有指标。先定义口径，再谈谁更好。', en: 'No metrics yet. Define the definition before arguing who is better.' },
   'hint.metricVersion': { zh: '每次保存都会生成新版本，旧版本留档——口径不会被悄悄改掉。', en: 'Every save creates a new version; old ones stay. Definitions are never silently rewritten.' },
+  'hint.metricUnit': {
+    zh: 'ratio 展示成百分比（0.166 → 16.60%）；number 原样展示，夏普这类无量纲值用 number。',
+    en: 'ratio renders as a percentage (0.166 → 16.60%); number renders as-is — use it for dimensionless values like Sharpe.',
+  },
   'hint.dataset': { zh: '数据集由 Firmament 定义，AutoLabs 只钉住 manifest 摘要。', en: 'Datasets are defined by Firmament; AutoLabs only pins the manifest digest.' },
   'label.gates': { zh: '门禁', en: 'Gates' },
   'label.metrics': { zh: '指标', en: 'Metrics' },
