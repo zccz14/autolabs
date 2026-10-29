@@ -18,6 +18,7 @@ import {
   type RunRow,
 } from '../store';
 import { matchMetrics, missingRequiredMetrics } from '../metrics';
+import { withExclusion } from '../runs';
 import { viewRun } from './projects';
 import { blobKey } from './snapshots';
 
@@ -117,13 +118,31 @@ projectRunRoutes.post('/:slug/sota', async (c) => {
     await c.env.DB.prepare(`UPDATE projects SET sota_run_id = ? WHERE id = ?`).bind(run.id, access.project.id).run();
   } else if (action === 'demote' && access.project.sota_run_id === run.id) {
     await c.env.DB.prepare(`UPDATE projects SET sota_run_id = NULL WHERE id = ?`).bind(access.project.id).run();
+  } else if (action === 'exclude') {
+    // 排除＝这个结论不算数：state 落 rejected，榜单上不再出现它。
+    // 只追加一条 excluded 门禁与一条账本事件，指标、报告、原门禁一个字节都不改。
+    const gates = run.gates_json ? (JSON.parse(run.gates_json) as { rule_id: string; pass: boolean; evidence: string | null }[]) : [];
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE runs SET state = 'rejected', gates_json = ?, settled_at = COALESCE(settled_at, ?) WHERE id = ?`).bind(
+        JSON.stringify(withExclusion(gates, reason)),
+        nowSeconds(),
+        run.id,
+      ),
+      c.env.DB.prepare(`UPDATE projects SET sota_run_id = NULL WHERE id = ? AND sota_run_id = ?`).bind(access.project.id, run.id),
+    ]);
+    await recordEvent(c.env, 'run.rejected', access.project.id, principal.userId, {
+      run_id: run.id,
+      action: 'exclude',
+      reason,
+    });
   }
   await c.env.DB.prepare(
     `INSERT INTO sota_events (id, project_id, run_id, action, reason, actor_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(newId('sot'), access.project.id, run.id, action, reason, principal.userId, nowSeconds())
     .run();
-  return c.json({ ok: true, action, run: viewRun(run), sota_events: await listSotaEvents(c.env, access.project.id, 20) });
+  const latest = (await findRun(c.env, run.id)) ?? run;
+  return c.json({ ok: true, action, run: viewRun(latest as RunRow), sota_events: await listSotaEvents(c.env, access.project.id, 20) });
 });
 
 export const runRoutes = new Hono<{ Bindings: Env }>();
