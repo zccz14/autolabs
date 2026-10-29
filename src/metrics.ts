@@ -1,9 +1,17 @@
 import { assertMetricKey } from './labs';
 
 export type MetricDirection = 'higher-better' | 'lower-better' | 'neutral';
-export type MetricUnit = 'ratio' | 'count' | 'bps' | 'seconds';
+/**
+ * 单位只决定「怎么展示」，不决定好坏：
+ *   ratio   比例，存小数（0.166 = 16.6%），展示时乘 100
+ *   number  无量纲数值，原样展示（夏普 1.93 就是 1.93，不是 193%）
+ *   count   笔数
+ *   bps     基点
+ *   seconds 秒
+ */
+export type MetricUnit = 'ratio' | 'count' | 'bps' | 'seconds' | 'number';
 
-export const METRIC_UNITS: MetricUnit[] = ['ratio', 'count', 'bps', 'seconds'];
+export const METRIC_UNITS: MetricUnit[] = ['ratio', 'count', 'bps', 'seconds', 'number'];
 export const METRIC_DIRECTIONS: MetricDirection[] = ['higher-better', 'lower-better', 'neutral'];
 
 export interface MetricDefinition {
@@ -58,7 +66,8 @@ export const METRIC_TEMPLATE: Omit<MetricDefinition, 'version'>[] = [
   {
     key: 'sharpe',
     label: '日收益夏普',
-    unit: 'ratio',
+    // 夏普是「每单位波动换来多少收益」的倍数，不是比例：写成 ratio 会被展示成 193%。
+    unit: 'number',
     direction: 'higher-better',
     is_primary: false,
     sort_order: 4,

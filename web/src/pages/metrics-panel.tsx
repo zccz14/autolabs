@@ -5,7 +5,7 @@ import { Empty, ErrorNote, Field, Section } from '../ui';
 import { useCopy } from '../copy';
 import { useMetrics, useRetireMetric, useUpsertMetric, type SdkLike } from '../api';
 
-const UNITS = ['ratio', 'count', 'bps', 'seconds'];
+const UNITS = ['ratio', 'count', 'bps', 'seconds', 'number'];
 const DIRECTIONS = ['higher-better', 'lower-better', 'neutral'] as const;
 
 export function MetricsPanel({ sdk, slug, onChanged }: { sdk: SdkLike | null; slug: string; onChanged: () => void }) {
@@ -67,6 +67,7 @@ export function MetricsPanel({ sdk, slug, onChanged }: { sdk: SdkLike | null; sl
                   </Button>
                 ))}
               </div>
+              <p className="mt-1 text-xs text-muted-foreground">{t('hint.metricUnit')}</p>
             </Field>
             <Field label={t('label.direction')}>
               <div className="flex flex-wrap gap-1">
