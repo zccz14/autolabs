@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
+import type { TokenView } from './tokens-format';
 
 /** 只用到 session 的两个能力：结构类型，避免把 auth-mini 的完整类型拖进前端。 */
 export interface SdkLike {
@@ -205,14 +206,30 @@ export function useFreezeSnapshot(sdk: SdkLike | null) {
   });
 }
 
+export function useTokens(sdk: SdkLike | null, slug: string) {
+  return useQuery({
+    queryKey: ['tokens', slug],
+    enabled: Boolean(sdk && slug),
+    queryFn: ({ signal }) => api<{ tokens: TokenView[] }>(sdk as SdkLike, `/api/v1/projects/${slug}/tokens`, { signal }),
+  });
+}
+
 export function useMintToken(sdk: SdkLike | null, slug: string) {
   return useMutation({
-    mutationFn: (label: string) =>
+    mutationFn: (input: { label: string; capabilities?: string[]; expires_in_days?: number }) =>
       api<{ token: string; id: string; capabilities: string[]; expires_in_days: number }>(
         sdk as SdkLike,
         `/api/v1/projects/${slug}/tokens`,
-        { method: 'POST', body: JSON.stringify({ label }) },
+        { method: 'POST', body: JSON.stringify(input) },
       ),
+  });
+}
+
+/** 吊销是唯一的回头路：令牌一死，用它签的请求立刻 401。 */
+export function useRevokeToken(sdk: SdkLike | null, slug: string) {
+  return useMutation({
+    mutationFn: (tokenId: string) =>
+      api<{ revoked: boolean }>(sdk as SdkLike, `/api/v1/projects/${slug}/tokens/${tokenId}/revoke`, { method: 'POST' }),
   });
 }
 

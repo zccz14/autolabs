@@ -179,10 +179,15 @@ routes.get('/:slug/tokens', async (c) => {
 routes.post('/:slug/tokens/:tokenId/revoke', async (c) => {
   const principal = await authenticate(c.req.raw, c.env);
   const access = await loadProject(c.env, c.req.param('slug'), principal, 'maintainer', 'write');
-  await c.env.DB.prepare(`UPDATE project_tokens SET revoked_at = ? WHERE id = ? AND project_id = ?`)
-    .bind(nowSeconds(), c.req.param('tokenId'), access.project.id)
+  const tokenId = c.req.param('tokenId');
+  // 只在「还活着」的时候翻状态：重复吊销不该刷出第二笔审计事件。
+  const result = await c.env.DB.prepare(
+    `UPDATE project_tokens SET revoked_at = ? WHERE id = ? AND project_id = ? AND revoked_at IS NULL`,
+  )
+    .bind(nowSeconds(), tokenId, access.project.id)
     .run();
-  await recordEvent(c.env, 'token.revoked', access.project.id, principal.userId, { token_id: c.req.param('tokenId') });
+  if (!result.meta.changes) return fail(409, 'already_revoked', '令牌不存在或已吊销');
+  await recordEvent(c.env, 'token.revoked', access.project.id, principal.userId, { token_id: tokenId });
   return c.json({ revoked: true });
 });
 
