@@ -73,6 +73,7 @@ export interface MetricView {
   direction: 'higher-better' | 'lower-better' | 'neutral';
   definition_md: string;
   is_primary: boolean;
+  required: boolean;
   sort_order: number;
 }
 

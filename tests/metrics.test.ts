@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assertMetricKey, manifestDigest } from '../src/labs';
-import { METRIC_TEMPLATE, matchMetrics, validateMetricInput } from '../src/metrics';
+import { METRIC_TEMPLATE, matchMetrics, missingRequiredMetrics, validateMetricInput } from '../src/metrics';
 
 describe('manifest digest', () => {
   it('is order independent and sensitive to size and content', async () => {
@@ -82,5 +82,28 @@ describe('template', () => {
       expect(() => validateMetricInput(metric)).not.toThrow();
     }
     expect(METRIC_TEMPLATE.filter((metric) => metric.is_primary)).toHaveLength(1);
+  });
+});
+
+describe('必报指标门禁', () => {
+  const definitions = [
+    { key: 'cumulative_return', required: 1 },
+    { key: 'max_drawdown', required: 1 },
+    { key: 'sharpe', required: 0 },
+  ];
+
+  it('少一个必报指标就点名', () => {
+    expect(missingRequiredMetrics(definitions, { cumulative_return: 0.3 })).toEqual(['max_drawdown']);
+  });
+
+  it('null / 字符串 / NaN 都算没报', () => {
+    expect(missingRequiredMetrics(definitions, { cumulative_return: null, max_drawdown: '-0.1' })).toEqual([
+      'cumulative_return',
+      'max_drawdown',
+    ]);
+  });
+
+  it('全报齐就空数组', () => {
+    expect(missingRequiredMetrics(definitions, { cumulative_return: 0.3, max_drawdown: -0.1 })).toEqual([]);
   });
 });

@@ -17,7 +17,7 @@ import {
   snapshotEntries,
   type RunRow,
 } from '../store';
-import { matchMetrics } from '../metrics';
+import { matchMetrics, missingRequiredMetrics } from '../metrics';
 import { viewRun } from './projects';
 import { blobKey } from './snapshots';
 
@@ -189,6 +189,21 @@ runRoutes.post('/:runId/verdict', async (c) => {
       `项目没有定义这些指标：${unknown.join(', ')}。先在项目的「指标」里定义口径，再上报。`,
     );
   }
+  // 必报指标由平台判定：机器可以自称全过，但少了指标就是没通过。
+  // 这条门禁的平台版本总是覆盖客户端上报的同名门禁，避免被自带 pass=true 骗过。
+  const requiredDefinitions = definitions.filter((definition) => definition.required);
+  const missingMetrics = missingRequiredMetrics(definitions, reportedMetrics);
+  const withMetricGate = [
+    ...normalized.filter((gate) => gate.rule_id !== 'metrics-reported'),
+    {
+      rule_id: 'metrics-reported',
+      pass: missingMetrics.length === 0,
+      evidence:
+        missingMetrics.length === 0
+          ? `已上报全部 ${requiredDefinitions.length} 个必报指标`
+          : `缺必报指标：${missingMetrics.join(', ')}`,
+    },
+  ];
   const report = optionalString(payload.report_md, 'report_md', 200000) ?? null;
   const metrics = payload.metrics ?? null;
   if (metrics !== null && (typeof metrics !== 'object' || Array.isArray(metrics))) {
@@ -233,14 +248,14 @@ runRoutes.post('/:runId/verdict', async (c) => {
       outputSnapshotId = snapshotId;
     }
   }
-  const allPass = normalized.every((gate) => gate.pass);
+  const allPass = withMetricGate.every((gate) => gate.pass);
   const state = allPass ? 'frozen' : 'rejected';
   await c.env.DB.prepare(
     `UPDATE runs SET state = ?, gates_json = ?, metrics_json = ?, metric_set_json = ?, report_md = ?, output_snapshot_id = ?, settled_at = ? WHERE id = ?`,
   )
     .bind(
       state,
-      JSON.stringify(normalized),
+      JSON.stringify(withMetricGate),
       metrics === null ? null : JSON.stringify(metrics),
       JSON.stringify(metricSet),
       report,
@@ -251,7 +266,7 @@ runRoutes.post('/:runId/verdict', async (c) => {
     .run();
   await recordEvent(c.env, `run.${state}`, access.project.id, principal?.userId ?? null, {
     run_id: run.id,
-    gates: normalized.map((gate) => ({ rule_id: gate.rule_id, pass: gate.pass })),
+    gates: withMetricGate.map((gate) => ({ rule_id: gate.rule_id, pass: gate.pass })),
   });
   const updated = await findRun(c.env, run.id);
   const outputEntries = outputSnapshotId ? await snapshotEntries(c.env, outputSnapshotId) : [];

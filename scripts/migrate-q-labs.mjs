@@ -16,6 +16,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseLeaderboard, resolveLabMetrics } from './lib/q-labs-metrics.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -108,29 +109,11 @@ function freezeEvidence(readme) {
   };
 }
 
-/** 指标先不写进榜单：Q-Labs 自己说 lab82 之后排名要重建，抄旧数字等于伪造 SOTA。 */
-function parseMetrics(readme) {
-  const line = readme.split('\n').find((text) => /核心结果|默认/.test(text) && /累计/.test(text));
-  if (!line) return null;
-  const pick = (pattern) => {
-    const match = pattern.exec(line);
-    if (!match) return null;
-    const value = Number(match[1].replace(/,/g, ''));
-    return Number.isFinite(value) ? value : null;
-  };
-  const metrics = {
-    trades: pick(/([\d,]+)`?\s*笔/),
-    avg_daily_trades: pick(/日均\s*(?:约\s*)?`?([\d.]+)/),
-    cumulative_return: pick(/累计(?:收益)?\s*`?(-?[\d.]+)%/),
-    annualized_return: pick(/年化\s*`?(-?[\d.]+)%/),
-    max_drawdown: pick(/最大回撤\s*`?(-?[\d.]+)%/),
-    sharpe: pick(/(?:日收益\s*)?Sharpe\s*`?(-?[\d.]+)/i),
-  };
-  if (metrics.cumulative_return !== null) metrics.cumulative_return /= 100;
-  if (metrics.annualized_return !== null) metrics.annualized_return /= 100;
-  if (metrics.max_drawdown !== null) metrics.max_drawdown /= 100;
-  const kept = Object.fromEntries(Object.entries(metrics).filter(([, value]) => value !== null));
-  return Object.keys(kept).length >= 3 ? kept : null;
+/** 指标只从可核对的来源取：lab 自己的 metrics.csv，或根 README 的 SOTA 榜单行。 */
+function metricsForLab(lab, sourceDir, leaderboard) {
+  const csvPath = path.join(lab.dir, 'outputs', 'metrics.csv');
+  const metricsCsvText = fs.existsSync(csvPath) ? fs.readFileSync(csvPath, 'utf8') : null;
+  return resolveLabMetrics({ labNo: lab.no, metricsCsvText, leaderboard });
 }
 
 async function request(api, token, method, route, body) {
@@ -211,7 +194,7 @@ async function main() {
       owner: args.owner,
       slug: args.slug,
       name: args.name ?? 'Q-Labs',
-      description: args.description ?? '股指期货日内策略研究：83 个已冻结 lab 的历史迁移，指标未回填。',
+      description: args.description ?? '股指期货日内策略研究：83 个 lab 的历史迁移，指标取自各自的 outputs/metrics.csv 或根 README 榜单。',
       tokenId,
       secretSha256,
       now,
@@ -225,23 +208,30 @@ async function main() {
   }
 
   const labs = discoverLabs(args.source);
+  const leaderboardPath = path.join(args.source, 'README.md');
+  const leaderboard = fs.existsSync(leaderboardPath) ? parseLeaderboard(fs.readFileSync(leaderboardPath, 'utf8')) : new Map();
   const plan = labs.map((lab) => {
     const files = selectFiles(lab);
     const readme = fs.readFileSync(lab.readme, 'utf8');
-    return { lab, files, readme, freeze: freezeEvidence(readme), metrics: parseMetrics(readme) };
+    return { lab, files, readme, freeze: freezeEvidence(readme), ...metricsForLab(lab, args.source, leaderboard) };
   });
   const totalBytes = plan.reduce((sum, item) => sum + item.files.reduce((s, file) => s + file.size, 0), 0);
   const totalFiles = plan.reduce((sum, item) => sum + item.files.length, 0);
   const metricsCount = plan.filter((item) => item.metrics).length;
+  const fromCsv = plan.filter((item) => item.source?.includes('metrics.csv')).length;
+  const fromTable = plan.filter((item) => item.source?.includes('Leaderboard'));
 
   console.log(`Q-Labs：${plan.length} 个编号 lab（lab1-lab${plan[plan.length - 1]?.lab.no ?? 0}）`);
   console.log(`快照内容：${totalFiles} 个文件 / ${(totalBytes / 1024 / 1024).toFixed(2)} MiB（源码 + README + outputs ≤${MAX_OUTPUT_BYTES / 1024} KiB 的结论表）`);
   console.log(`单 lab 最大：${Math.max(...plan.map((item) => item.files.reduce((s, f) => s + f.size, 0))) / 1024 | 0} KiB`);
   console.log(`README 声明冻结/完成：${plan.filter((item) => item.freeze.pass).length} / ${plan.length}`);
-  console.log(`README 能解析出 ≥3 个指标：${metricsCount} / ${plan.length}（默认不写进 run）`);
+  console.log(`能报全 6 个指标：${metricsCount} / ${plan.length}（metrics.csv ${fromCsv} 条 + 榜单行 ${fromTable.length} 条）`);
+  console.log(`缺指标（不会通过）：${plan.length - metricsCount} 条 → ${plan.filter((item) => !item.metrics).map((item) => `lab${item.lab.no}`).join(', ')}`);
+  const passCount = plan.filter((item) => item.freeze.pass && item.metrics).length;
+  console.log(`按门禁预计 frozen：${passCount} / ${plan.length}（README 未声明冻结 ${plan.filter((item) => !item.freeze.pass).length} 条）`);
 
   if (!args.apply) {
-    const preview = plan.slice(0, 5).map((item) => `  lab-${String(item.lab.no).padStart(4, '0')}  ${item.files.length} 文件  ${(item.files.reduce((s, f) => s + f.size, 0) / 1024).toFixed(0)} KiB  ${item.freeze.pass ? 'frozen' : 'rejected'}`);
+    const preview = plan.slice(0, 5).map((item) => `  lab-${String(item.lab.no).padStart(4, '0')}  ${item.files.length} 文件  ${(item.files.reduce((s, f) => s + f.size, 0) / 1024).toFixed(0)} KiB  ${item.freeze.pass ? 'frozen' : 'rejected'}  ${item.metrics ? '指标 6/6' : '指标缺失'}`);
     console.log('干跑，前 5 条：\n' + preview.join('\n'));
     console.log('加 --apply --api <url> --token <alb_…> 才会真正上传。');
     return;
@@ -284,10 +274,14 @@ async function main() {
       ],
       report_md: item.readme,
     };
-    if (args.metrics && item.metrics) verdict.metrics = item.metrics;
+    if (item.metrics) verdict.metrics = item.metrics;
     await request(args.api, args.token, 'POST', `/api/v1/runs/${created.run.id}/verdict`, verdict);
     imported += 1;
-    console.log(`  ${label} ← ${item.lab.name}：${item.files.length} 文件 / ${(snapshotSize / 1024).toFixed(0)} KiB → ${item.freeze.pass ? 'frozen' : 'rejected'}`);
+    console.log(
+      `  ${label} ← ${item.lab.name}：${item.files.length} 文件 / ${(snapshotSize / 1024).toFixed(0)} KiB → ${
+        item.freeze.pass && item.metrics ? 'frozen' : 'rejected'
+      }（${item.metrics ? '指标 6/6' : '缺指标'}）`,
+    );
     if (args.limit && imported >= Number(args.limit)) break;
   }
   const after = await request(args.api, args.token, 'GET', `/api/v1/projects/${args.slug}`);

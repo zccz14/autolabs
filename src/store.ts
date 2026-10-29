@@ -266,6 +266,7 @@ export interface MetricRow {
   direction: 'higher-better' | 'lower-better' | 'neutral';
   definition_md: string;
   is_primary: number;
+  required: number;
   sort_order: number;
   created_by: string;
   created_at: number;
@@ -279,8 +280,8 @@ export async function seedMetrics(env: Env, projectId: string, userId: string): 
   await env.DB.batch(
     METRIC_TEMPLATE.map((metric) =>
       env.DB.prepare(
-        `INSERT INTO project_metrics (id, project_id, key, version, label, unit, direction, definition_md, is_primary, sort_order, created_by, created_at)
-         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO project_metrics (id, project_id, key, version, label, unit, direction, definition_md, is_primary, required, sort_order, created_by, created_at)
+         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         newId('met'),
         projectId,

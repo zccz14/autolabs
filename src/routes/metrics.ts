@@ -18,6 +18,7 @@ export function viewMetric(row: MetricRow) {
     direction: row.direction,
     definition_md: row.definition_md,
     is_primary: Boolean(row.is_primary),
+    required: Boolean(row.required),
     sort_order: row.sort_order,
   };
 }
@@ -66,13 +67,15 @@ projectMetricRoutes.post('/:slug/metrics', async (c) => {
   const version = (previous?.version ?? 0) + 1;
   const isPrimary = payload.is_primary === true;
   const sortOrder = typeof payload.sort_order === 'number' ? payload.sort_order : (previous?.sort_order ?? 100);
+  // 新版本沿用上一版的必报设置；显式传了 required 才改。
+  const required = typeof payload.required === 'boolean' ? payload.required : Boolean(previous?.required);
   if (isPrimary) {
     await c.env.DB.prepare(`UPDATE project_metrics SET is_primary = 0 WHERE project_id = ?`).bind(access.project.id).run();
   }
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO project_metrics (id, project_id, key, version, label, unit, direction, definition_md, is_primary, sort_order, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO project_metrics (id, project_id, key, version, label, unit, direction, definition_md, is_primary, required, sort_order, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       newId('met'),
       access.project.id,
@@ -83,6 +86,7 @@ projectMetricRoutes.post('/:slug/metrics', async (c) => {
       direction,
       definition,
       isPrimary ? 1 : 0,
+      required ? 1 : 0,
       sortOrder,
       principal.userId,
       nowSeconds(),
