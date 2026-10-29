@@ -27,17 +27,26 @@
  * `prefers-color-scheme`，否则外壳跟系统走、页面跟系统走、用户手动切换时只
  * 有一半会变，出现深色外壳配浅色页面（侧边栏文字几乎不可读）。
  */
+/*
+ * 黑白配色：只有灰阶，没有色相。深浅两级靠明度区分，层级靠边框与留白，
+ * 不靠颜色——这样截图、打印、投屏都是同一套观感。
+ * 唯一的例外是 --destructive：报错和「缺必报指标」的红必须一眼认出，
+ * 这是功能信号，不是装饰色。
+ */
 :root {
   color-scheme: light;
-  --background: #f7f8f5;
-  --foreground: #16211f;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
   --card: #ffffff;
-  --border: #d8e0dc;
-  --primary: #0e7c66;
+  --border: #e5e5e5;
+  --primary: #0a0a0a;
   --primary-foreground: #ffffff;
-  --muted: #edf2ef;
-  --muted-foreground: #5a6b68;
+  --muted: #f4f4f4;
+  --muted-foreground: #6b6b6b;
   --destructive: #b42318;
+  /* @zccz14/ux 外壳读的是裸 --ring / --accent，不定义就会退回它自己的蓝色。 */
+  --ring: #0a0a0a;
+  --accent: #f4f4f4;
   --radius: 0.5rem;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--foreground);
@@ -46,15 +55,17 @@
 
 .dark {
   color-scheme: dark;
-  --background: #0f1614;
-  --foreground: #e8efec;
-  --card: #121a18;
-  --border: #253430;
-  --primary: #3fbfa2;
-  --primary-foreground: #06231c;
-  --muted: #17211f;
-  --muted-foreground: #93a5a1;
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #141414;
+  --border: #2a2a2a;
+  --primary: #fafafa;
+  --primary-foreground: #0a0a0a;
+  --muted: #1c1c1c;
+  --muted-foreground: #a1a1a1;
   --destructive: #f0938a;
+  --ring: #fafafa;
+  --accent: #1c1c1c;
 }
 
 body { margin: 0; }
@@ -69,10 +80,8 @@ table.plain th, table.plain td { text-align: left; padding: 8px 10px; border-bot
 table.plain th { color: var(--muted-foreground); font-weight: 600; font-size: 12px; }
 pre.block { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; line-height: 1.65; padding: 14px; background: var(--muted); border-radius: 8px; margin: 0; }
 .pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; border: 1px solid var(--border); }
-.pill-frozen { color: #0e7c66; border-color: #9fd4c5; background: #e8f6f1; }
-.pill-rejected { color: #b42318; border-color: #f0c2bd; background: #fdeceb; }
-.pill-live { color: #8a5a00; border-color: #eccf92; background: #fdf5e3; }
+/* 状态用「墨色浓淡」表达层级：已结算=实底，在跑=描边，被否=灰掉。 */
+.pill-frozen { color: var(--background); border-color: var(--foreground); background: var(--foreground); }
+.pill-rejected { color: var(--muted-foreground); border-color: var(--border); background: var(--muted); }
+.pill-live { color: var(--foreground); border-color: var(--border); border-style: dashed; background: transparent; }
 .pill-proposed { color: var(--muted-foreground); }
-.dark .pill-frozen { background: #13312a; border-color: #1f5c4d; color: #6fd8bb; }
-.dark .pill-rejected { background: #33191a; border-color: #6b2a26; color: #f0938a; }
-.dark .pill-live { background: #2f2716; border-color: #6b551f; color: #e8c076; }
