@@ -61,6 +61,29 @@ export const COPY = {
   'hint.login': { zh: '正在确认你的 Auth Mini 身份…', en: 'Checking your Auth Mini identity…' },
   'hint.audience': { zh: '若被拒绝：Auth Mini 需要把 autolabs.ntnl.io 加进 audience 列表。', en: 'If rejected: Auth Mini must include autolabs.ntnl.io in its audiences.' },
   'about.title': { zh: 'AutoLabs 是什么', en: 'What AutoLabs is' },
+  'label.tokens': { zh: '令牌', en: 'Tokens' },
+  'action.mintToken': { zh: '签发令牌', en: 'Mint token' },
+  'action.revoke': { zh: '吊销', en: 'Revoke' },
+  'action.confirmRevoke': { zh: '确认吊销', en: 'Confirm revoke' },
+  'action.copy': { zh: '复制', en: 'Copy' },
+  'action.copied': { zh: '已复制', en: 'Copied' },
+  'label.capabilities': { zh: '能力', en: 'Capabilities' },
+  'label.created': { zh: '创建', en: 'Created' },
+  'label.expires': { zh: '到期', en: 'Expires' },
+  'label.expiresInDays': { zh: '有效天数', en: 'Valid days' },
+  'label.live': { zh: '有效', en: 'Live' },
+  'label.revoked': { zh: '已吊销', en: 'Revoked' },
+  'label.expired': { zh: '已过期', en: 'Expired' },
+  'label.newToken': { zh: '新令牌（只显示一次）', en: 'New token (shown once)' },
+  'empty.tokens': { zh: '还没有令牌。', en: 'No tokens yet.' },
+  'hint.tokens': {
+    zh: '令牌只在签发那一刻显示一次；吊销即刻失效，不可恢复。用完就吊销，别留长命凭据。',
+    en: 'A token is shown once, at mint time. Revoking kills it immediately and for good — revoke what you no longer need.',
+  },
+  'hint.tokenCapabilities': {
+    zh: 'read 读、write 写、verdict 上报结论、sota 改 SOTA 指针——sota 是危险能力，单独签发，用完吊销。',
+    en: 'read, write, verdict, and sota. sota moves the SOTA pointer — issue it on its own and revoke it right after.',
+  },
 } as const;
 
 export type CopyKey = keyof typeof COPY;

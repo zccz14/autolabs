@@ -3,23 +3,22 @@ import { Link, useParams } from 'react-router-dom';
 import { KeyRoundIcon, PlayIcon, SnowflakeIcon } from 'lucide-react';
 import { useAuthMini } from 'auth-mini-react-components';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { Empty, ErrorNote, Section, StatePill, when } from '../ui';
 import { useCopy } from '../copy';
 import { DatasetPanel } from './dataset-panel';
+import { TokensPanel } from './tokens-panel';
 import { MetricsPanel } from './metrics-panel';
 import {
   downloadSnapshot,
   useCreateRun,
   useFreezeSnapshot,
   useMetrics,
-  useMintToken,
   useProject,
   type SdkLike,
 } from '../api';
 import { formatMetricValue } from '../metrics-format';
 
-type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots';
+type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots' | 'tokens';
 
 export function ProjectPage() {
   const t = useCopy();
@@ -29,10 +28,8 @@ export function ProjectPage() {
   const detail = useProject(typed, slug);
   const createRun = useCreateRun(typed, slug ?? '');
   const freeze = useFreezeSnapshot(typed);
-  const mint = useMintToken(typed, slug ?? '');
   const metricDefs = useMetrics(typed, slug);
   const [tab, setTab] = useState<Tab>('runs');
-  const [token, setToken] = useState<string | null>(null);
 
   if (!slug) return null;
   const project = detail.data?.project;
@@ -68,13 +65,9 @@ export function ProjectPage() {
           <Button variant="outline" size="sm" onClick={() => detail.refetch()}>
             {t('action.refresh')}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => mint.mutate('机器同步凭据', { onSuccess: (data) => setToken(data.token) })}
-          >
+          <Button variant="outline" size="sm" onClick={() => setTab('tokens')}>
             <KeyRoundIcon />
-            token
+            {t('label.tokens')}
           </Button>
           <Button size="sm" disabled={createRun.isPending} onClick={() => createRun.mutate('', { onSuccess: () => detail.refetch() })}>
             <PlayIcon />
@@ -83,13 +76,7 @@ export function ProjectPage() {
         </div>
       </header>
 
-      <ErrorNote error={detail.error ?? createRun.error ?? freeze.error ?? mint.error} />
-
-      {token ? (
-        <Section title="机器凭据（只显示一次）" description="把它给 Cybion 的 Thread：curl -H 'Authorization: Bearer <token>' …">
-          <pre className="block">{token}</pre>
-        </Section>
-      ) : null}
+      <ErrorNote error={detail.error ?? createRun.error ?? freeze.error} />
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Stat label={t('label.labs')} value={String(project?.lab_seq ?? 0)} />
@@ -99,7 +86,7 @@ export function ProjectPage() {
       </div>
 
       <nav className="flex gap-2">
-        {(['runs', 'leaderboard', 'metrics', 'dataset', 'snapshots'] as Tab[]).map((value) => (
+        {(['runs', 'leaderboard', 'metrics', 'dataset', 'snapshots', 'tokens'] as Tab[]).map((value) => (
           <Button key={value} size="sm" variant={tab === value ? 'default' : 'outline'} onClick={() => setTab(value)}>
             {labelForTab(value, t)}
           </Button>
@@ -195,6 +182,8 @@ export function ProjectPage() {
 
       {tab === 'dataset' ? <DatasetPanel sdk={typed} slug={slug} onChanged={() => detail.refetch()} /> : null}
 
+      {tab === 'tokens' ? <TokensPanel sdk={typed} slug={slug} /> : null}
+
       {tab === 'snapshots' ? (
         snapshots.length === 0 ? (
           <Empty>{t('empty.snapshots')}</Empty>
@@ -275,11 +264,15 @@ export function ProjectPage() {
   );
 }
 
-function labelForTab(tab: Tab, t: (key: 'label.runs' | 'label.leaderboard' | 'label.metricsTab' | 'label.datasetTab' | 'label.snapshots') => string) {
+function labelForTab(
+  tab: Tab,
+  t: (key: 'label.runs' | 'label.leaderboard' | 'label.metricsTab' | 'label.datasetTab' | 'label.snapshots' | 'label.tokens') => string,
+) {
   if (tab === 'metrics') return t('label.metricsTab');
   if (tab === 'dataset') return t('label.datasetTab');
   if (tab === 'leaderboard') return t('label.leaderboard');
   if (tab === 'snapshots') return t('label.snapshots');
+  if (tab === 'tokens') return t('label.tokens');
   return t('label.runs');
 }
 
