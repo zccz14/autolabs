@@ -87,6 +87,37 @@ export function parseLeaderboard(text) {
   return table;
 }
 
+/**
+ * 根 README 榜单的「排名」列：写数字才算进了排名。
+ * 写成「排除」「重评估」这类标注的，说明它不是一个能独立汇报指标的实验——
+ * 中途的重评估、继承未来信息的结果都归这一类，只能算 rejected。
+ */
+export function parseLeaderboardStatus(text) {
+  const lines = text.split(/\r?\n/);
+  const headerLine = lines.find((line) => line.startsWith('|') && line.includes('Lab') && line.includes('累计收益'));
+  if (!headerLine) return new Map();
+  const header = splitRow(headerLine);
+  const labIndex = header.findIndex((cell) => cell === 'Lab');
+  const rankIndex = header.indexOf('排名');
+  const noteIndex = header.indexOf('评价');
+  if (labIndex < 0 || rankIndex < 0) return new Map();
+  const table = new Map();
+  for (const line of lines) {
+    if (!line.startsWith('|') || line === headerLine) continue;
+    const cells = splitRow(line);
+    const match = /`?lab(\d+)`?/.exec(cells[labIndex] ?? '');
+    if (!match) continue;
+    const status = (cells[rankIndex] ?? '').trim();
+    if (!status) continue;
+    table.set(Number(match[1]), {
+      status,
+      ranked: /^\d+$/.test(status),
+      note: noteIndex >= 0 ? (cells[noteIndex] ?? '').trim() : '',
+    });
+  }
+  return table;
+}
+
 /** 指标只有一个来源优先级：lab 自己的 metrics.csv 优先于人工维护的榜单行。 */
 export function resolveLabMetrics({ labNo, metricsCsvText, leaderboard }) {
   if (metricsCsvText) {

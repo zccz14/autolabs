@@ -10,6 +10,7 @@ export type LabMetrics = {
 export declare const METRIC_KEYS: string[];
 export declare function parseMetricsCsv(text: string): LabMetrics | null;
 export declare function parseLeaderboard(text: string): Map<number, LabMetrics>;
+export declare function parseLeaderboardStatus(text: string): Map<number, { status: string; ranked: boolean; note: string }>;
 export declare function resolveLabMetrics(input: {
   labNo: number;
   metricsCsvText?: string | null;

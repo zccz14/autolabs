@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLeaderboard, parseMetricsCsv, resolveLabMetrics } from '../scripts/lib/q-labs-metrics.mjs';
+import { parseLeaderboard, parseLeaderboardStatus, parseMetricsCsv, resolveLabMetrics } from '../scripts/lib/q-labs-metrics.mjs';
 
 const HEADER =
   'trades,win_rate,avg_trade_return,total_return,annual_return,max_drawdown,return_drawdown_ratio,daily_sharpe,avg_daily_trades';
@@ -43,5 +43,28 @@ describe('Q-Labs 指标来源', () => {
     expect(resolveLabMetrics({ labNo: 7, metricsCsvText: csv, leaderboard }).source).toContain('metrics.csv');
     expect(resolveLabMetrics({ labNo: 7, metricsCsvText: null, leaderboard }).source).toContain('Leaderboard');
     expect(resolveLabMetrics({ labNo: 99, metricsCsvText: null, leaderboard })).toEqual({ metrics: null, source: null });
+  });
+});
+
+describe('Q-Labs 榜单的排名列', () => {
+  const table = [
+    '| 排名 | Lab | 定位 | 全量数据 | 样本外评估 | 交易数 | 样本外日均交易 | 累计收益 | 年化收益 | 最大回撤 | 收益回撤比 | 日收益夏普 | 评价 |',
+    '| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
+    '| 排除 | `lab54` | 原 SOTA | 四品种全量 | 滚动训练 | 3298 | 1.03 | 430.25% | 58.48% | -9.00% | 47.83 | 2.93 | 使用同日完整候选 daily_rank。 |',
+    '| 重评估 | `lab82` | 因果重评估 | 四品种全量 | 滚动训练 | 1493 | 0.46 | 30.92% | 11.96% | -17.75% | 1.74 | 0.90 | 不满足频率硬约束。 |',
+    '| 2 | `lab51` | IC/IH short-only | 四品种全量 | 滚动训练 | 3285 | 1.02 | 373.70% | 53.62% | -9.00% | 41.53 | 2.78 | 被 lab54 超过。 |',
+  ].join('\n');
+
+  it('排名是数字才算进了排名', () => {
+    const status = parseLeaderboardStatus(table);
+    expect(status.get(51)).toMatchObject({ status: '2', ranked: true });
+    expect(status.get(51)?.note).toContain('被 lab54 超过');
+  });
+
+  it('写成排除/重评估的没有独立资格', () => {
+    const status = parseLeaderboardStatus(table);
+    expect(status.get(54)).toMatchObject({ status: '排除', ranked: false });
+    expect(status.get(82)).toMatchObject({ status: '重评估', ranked: false });
+    expect(status.get(82)?.note).toContain('频率硬约束');
   });
 });

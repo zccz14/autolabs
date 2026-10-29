@@ -42,14 +42,18 @@ Q-Labs 的 `labs/` 下有 113 个目录，但只有 83 个是 `lab<N>`：
 每个 run 至少两条门禁：
 
 ```json
-{ "rule_id": "imported-history", "pass": true, "evidence": "README 声明该 lab 已冻结（Q-Labs labs/lab54/README.md）" }
+{ "rule_id": "imported-history", "pass": true, "evidence": "README 声明该 lab 已冻结（Q-Labs labs/lab75/README.md）" }
+{ "rule_id": "standalone-result", "pass": false, "evidence": "README 的排名列写的是「排除」，不是名次：继承 lab54/lab55 rank 执行层风险，需因果重建后再评估。" }
 { "rule_id": "metrics-reported", "pass": true, "evidence": "已上报全部 6 个必报指标" }
 ```
 
 - `imported-history`：README 里有没有"已冻结 / 已完成全量"这类声明；**67 条**有，**16 条**没有（`lab79`、`lab81`、`lab82` 等）。
+- `standalone-result`：这个 lab 有没有独立资格。**只认榜单的「排名」列**：写数字才算进了排名；写成「排除」「重评估」的，说明它不是一个能独立汇报完整指标的实验——要么被判定用了未来信息，要么只是对上一个 lab 的中途重评估。这类结果即使指标齐全、README 也声明了冻结，同样判 `rejected`。
 - `metrics-reported`：**平台自己判定**的必报指标门禁。项目把六条口径全部标成 `required`，run 少一个就是 `pass=false`，客户端自带同名门禁会被覆盖——机器不能靠自报 `pass:true` 蒙过去。
 
-两条全过才 `frozen`。所以 83 个 lab 里 **51 个通过、32 个 rejected**：16 个是 README 没声明冻结，另外 16 个是没报全指标。`rejected` 不等于实验做错了，只等于"它没满足进入 SOTA 账本的最低条件"。
+三条全过才 `frozen`。所以 83 个 lab 里 **49 个通过、34 个 rejected**：16 个是 README 没声明冻结，16 个是没报全指标，另外 2 个（`lab54`、`lab75`）指标齐全、也声明了冻结，但 Q-Labs 自己已经把它们的排名写成「排除」（执行层未来信息），排除即不算数。`rejected` 不等于实验做错了，只等于"它没满足进入 SOTA 账本的最低条件"。
+
+同一把尺子也解释了 `lab82`：它是对 `lab54` 的因果重评估，榜单里标「重评估」而不是名次，`0.46` 笔/日更不满足频率硬约束——中途的合格结论可以写进报告，但它不是一个能独立上台的实验。
 
 README 全文同时写进 `report_md`，原文保留，方便日后逐字对照。
 

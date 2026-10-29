@@ -16,7 +16,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseLeaderboard, resolveLabMetrics } from './lib/q-labs-metrics.mjs';
+import { parseLeaderboard, parseLeaderboardStatus, resolveLabMetrics } from './lib/q-labs-metrics.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -106,6 +106,19 @@ function freezeEvidence(readme) {
   return {
     pass: frozen || completed,
     text: frozen ? 'README 声明该 lab 已冻结' : completed ? 'README 声明已完成全量默认运行' : 'README 未声明冻结或完成',
+  };
+}
+
+/**
+ * 排名列写了数字，才算「一个能独立汇报指标的实验」。
+ * 写成「排除」「重评估」的，是中途评估或已被判定不算数的结果——不完整，没有独立资格。
+ */
+function standingEvidence(standing) {
+  if (!standing) return { pass: true, text: 'README 榜单里没有这一行（按 lab 自己的结论迁移）' };
+  if (standing.ranked) return { pass: true, text: `README 把它排在第 ${standing.status} 名` };
+  return {
+    pass: false,
+    text: `README 的排名列写的是「${standing.status}」，不是名次${standing.note ? `：${standing.note}` : ''}`,
   };
 }
 
@@ -209,12 +222,16 @@ async function main() {
 
   const labs = discoverLabs(args.source);
   const leaderboardPath = path.join(args.source, 'README.md');
-  const leaderboard = fs.existsSync(leaderboardPath) ? parseLeaderboard(fs.readFileSync(leaderboardPath, 'utf8')) : new Map();
+  const leaderboardText = fs.existsSync(leaderboardPath) ? fs.readFileSync(leaderboardPath, 'utf8') : '';
+  const leaderboard = leaderboardText ? parseLeaderboard(leaderboardText) : new Map();
+  const standings = leaderboardText ? parseLeaderboardStatus(leaderboardText) : new Map();
   const plan = labs.map((lab) => {
     const files = selectFiles(lab);
     const readme = fs.readFileSync(lab.readme, 'utf8');
-    return { lab, files, readme, freeze: freezeEvidence(readme), ...metricsForLab(lab, args.source, leaderboard) };
+    const standing = standingEvidence(standings.get(lab.no) ?? null);
+    return { lab, files, readme, freeze: freezeEvidence(readme), standing, ...metricsForLab(lab, args.source, leaderboard) };
   });
+  const qualified = (item) => item.freeze.pass && Boolean(item.metrics) && item.standing.pass;
   const totalBytes = plan.reduce((sum, item) => sum + item.files.reduce((s, file) => s + file.size, 0), 0);
   const totalFiles = plan.reduce((sum, item) => sum + item.files.length, 0);
   const metricsCount = plan.filter((item) => item.metrics).length;
@@ -227,11 +244,13 @@ async function main() {
   console.log(`README 声明冻结/完成：${plan.filter((item) => item.freeze.pass).length} / ${plan.length}`);
   console.log(`能报全 6 个指标：${metricsCount} / ${plan.length}（metrics.csv ${fromCsv} 条 + 榜单行 ${fromTable.length} 条）`);
   console.log(`缺指标（不会通过）：${plan.length - metricsCount} 条 → ${plan.filter((item) => !item.metrics).map((item) => `lab${item.lab.no}`).join(', ')}`);
-  const passCount = plan.filter((item) => item.freeze.pass && item.metrics).length;
+  const passCount = plan.filter(qualified).length;
+  const unranked = plan.filter((item) => !item.standing.pass);
+  console.log(`README 没给名次（排除/重评估，只能 rejected）：${unranked.length} 条 → ${unranked.map((item) => `lab${item.lab.no}`).join(', ')}`);
   console.log(`按门禁预计 frozen：${passCount} / ${plan.length}（README 未声明冻结 ${plan.filter((item) => !item.freeze.pass).length} 条）`);
 
   if (!args.apply) {
-    const preview = plan.slice(0, 5).map((item) => `  lab-${String(item.lab.no).padStart(4, '0')}  ${item.files.length} 文件  ${(item.files.reduce((s, f) => s + f.size, 0) / 1024).toFixed(0)} KiB  ${item.freeze.pass ? 'frozen' : 'rejected'}  ${item.metrics ? '指标 6/6' : '指标缺失'}`);
+    const preview = plan.slice(0, 5).map((item) => `  lab-${String(item.lab.no).padStart(4, '0')}  ${item.files.length} 文件  ${(item.files.reduce((s, f) => s + f.size, 0) / 1024).toFixed(0)} KiB  ${qualified(item) ? 'frozen' : 'rejected'}  ${item.metrics ? '指标 6/6' : '指标缺失'}`);
     console.log('干跑，前 5 条：\n' + preview.join('\n'));
     console.log('加 --apply --api <url> --token <alb_…> 才会真正上传。');
     return;
@@ -271,6 +290,11 @@ async function main() {
           pass: item.freeze.pass,
           evidence: `${item.freeze.text}（Q-Labs labs/${item.lab.name}/README.md）`,
         },
+        {
+          rule_id: 'standalone-result',
+          pass: item.standing.pass,
+          evidence: `${item.standing.text}（Q-Labs README.md 的 SOTA 榜单）`,
+        },
       ],
       report_md: item.readme,
     };
@@ -279,7 +303,7 @@ async function main() {
     imported += 1;
     console.log(
       `  ${label} ← ${item.lab.name}：${item.files.length} 文件 / ${(snapshotSize / 1024).toFixed(0)} KiB → ${
-        item.freeze.pass && item.metrics ? 'frozen' : 'rejected'
+        qualified(item) ? 'frozen' : 'rejected'
       }（${item.metrics ? '指标 6/6' : '缺指标'}）`,
     );
     if (args.limit && imported >= Number(args.limit)) break;
