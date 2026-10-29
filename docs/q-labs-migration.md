@@ -37,27 +37,45 @@ Q-Labs 的 `labs/` 下有 113 个目录，但只有 83 个是 `lab<N>`：
 
 所以这次迁移的证据边界要说清楚：**迁进来的是"这个 lab 是什么 + 它自己宣称了什么结论"，不是"这个结论在 AutoLabs 里被重新验证过"。** 快照可下载、可 diff、可追溯，但它不是 Q-Labs 那份 GB 级产物的替代品——真要复现，还是回原仓库跑。
 
-## 三、门禁：`imported-history`，证据是 README 原文
+## 三、门禁：两条，缺一不可
 
-每个 run 一条门禁：
+每个 run 至少两条门禁：
 
 ```json
 { "rule_id": "imported-history", "pass": true, "evidence": "README 声明该 lab 已冻结（Q-Labs labs/lab54/README.md）" }
+{ "rule_id": "metrics-reported", "pass": true, "evidence": "已上报全部 6 个必报指标" }
 ```
 
-判定依据只有一条：README 里有没有"已冻结 / 已完成全量"这类声明。结果 **67 个 `frozen`、16 个 `rejected`**（`lab79`、`lab81`、`lab82` 等 README 没写这句）。
+- `imported-history`：README 里有没有"已冻结 / 已完成全量"这类声明；**67 条**有，**16 条**没有（`lab79`、`lab81`、`lab82` 等）。
+- `metrics-reported`：**平台自己判定**的必报指标门禁。项目把六条口径全部标成 `required`，run 少一个就是 `pass=false`，客户端自带同名门禁会被覆盖——机器不能靠自报 `pass:true` 蒙过去。
 
-这是**继承历史**，不是**重新判卷**：`rejected` 不等于实验做错了，只等于"它没在自己的 README 里声明过冻结"。要把它判成 `frozen`，该补的是门禁语义（比如按 README 结论逐条对上门禁项），不是补指标。
+两条全过才 `frozen`。所以 83 个 lab 里 **51 个通过、32 个 rejected**：16 个是 README 没声明冻结，另外 16 个是没报全指标。`rejected` 不等于实验做错了，只等于"它没满足进入 SOTA 账本的最低条件"。
 
 README 全文同时写进 `report_md`，原文保留，方便日后逐字对照。
 
-## 四、指标故意空着
+## 四、指标：只从可核对的来源取，缺了就不通过
 
-Q-Labs 的 README 里能正则出 ≥3 个指标的 lab 有 50 个，脚本也有 `--metrics` 开关能把它们写进 verdict——**这次全部没用，`runs.metrics_json` 是 NULL**。
+每个 lab 必须报全六个指标（累计收益、年化收益、最大回撤、日收益夏普、交易数、平均每日交易），否则 `metrics-reported` 门禁不过。指标只有两个来源，都要求"机器可核对"：
 
-原因在 Q-Labs 自己的结论里：`lab82` 用执行层口径重算了历史，明确指出**榜单必须按因果口径重建**，`avg_daily_trades >= 1.0` 这类硬约束和 `lab54 / lab79 / lab82` 的降级结论还挂在 README 上。在这种状态下把旧 README 里的数字抄进 `metrics_json`，等于用平台的字段给一份已知失真的榜单盖章——**抄旧数字就是伪造 SOTA**。
+| 来源 | 覆盖 | 为什么可信 |
+| --- | --- | --- |
+| `labs/labN/outputs/metrics.csv` | **50 条** | lab 自己的脚本跑出来的原始输出，一行一条策略，收益列本来就是小数 |
+| 根 `README.md` 的 SOTA Leaderboard 表 | **+4 条**（`lab7/8/13/14`） | 人工维护但列定义固定，每行都写了口径 |
+| 合计 | **54 / 83** | |
 
-所以顺序是：先按因果执行口径重算，再用新数字回填。在那之前，`q-labs` 的榜单是空表，这是正确状态，不是缺失。
+**故意不解析 README 散文。** 那些句子里经常同时出现别的 lab 的数字：
+
+> 相比 `lab3` 的 `63261` 笔交易，`lab4` 降到 `1395` 笔……累计收益也从 `-100.00%` 改善到 `-8.33%`
+
+正则很容易把 `63261` 或 `-100.00%` 当成 lab4 的结果。抄错一个数，就是用平台的字段给一份假榜单盖章——比空着更糟。所以 **29 个只有散文、没有 `metrics.csv` 的 lab 一律判 rejected**，缺的指标在证据里点名，而不是猜一个值填进去。
+
+这也意味着 `lab1`–`lab6`、`lab9`–`lab30`、`lab52/53/58` 里，凡是没跑出 `metrics.csv` 的都不再算"通过"。要把它们救回来，正确做法是在 Q-Labs 机器上补跑：
+
+```sh
+python -m qlabs_eval.cli labs/labN/outputs --report-dir /tmp/labN_audit
+```
+
+拿到同口径的 `metrics.csv` 后重跑迁移脚本即可（脚本按编号前缀续跑，已存在的会跳过，需要整段重导时先清空项目的 runs）。
 
 ## 五、怎么跑
 
@@ -67,7 +85,7 @@ Q-Labs 的 README 里能正则出 ≥3 个指标的 lab 有 50 个，脚本也�
 node scripts/migrate-q-labs.mjs --source ~/Projects/Q-Labs
 ```
 
-只读本地，不上传，打印：编号范围、文件数与总字节、单 lab 最大体积、README 声明冻结的比例、能解析出指标的比例，以及前 5 条的 frozen/rejected 预览。
+只读本地，不上传，打印：编号范围、文件数与总字节、单 lab 最大体积、README 声明冻结的比例、能报全六个指标的比例与来源、缺指标的 lab 清单、按门禁预计通过多少条，以及前 5 条的预览。
 
 ### 2. 建项目：只能走 SQL
 
@@ -101,7 +119,7 @@ node scripts/migrate-q-labs.mjs --source ~/Projects/Q-Labs --apply \
 ### 4. 迁移后校验
 
 ```sh
-# 项目状态：83 个 run，lab_seq=83
+# 项目状态：83 个 run，lab_seq=83，51 frozen / 32 rejected
 curl -sH "Authorization: Bearer $T" https://autolabs.ntnl.io/api/v1/projects/q-labs | head -c 600
 
 # 编号连续性（应当 1..83 各一条，无空洞）
@@ -109,10 +127,10 @@ npx wrangler d1 execute autolabs --remote --config wrangler.jsonc \
   --command "SELECT COUNT(*) AS runs, MIN(lab_no) AS lo, MAX(lab_no) AS hi, COUNT(DISTINCT lab_no) AS distinct_no FROM runs WHERE project_id='prj_b615581e3a0088c505f41279'"
 ```
 
-线上实测：83 个 run / 67 `frozen` / 16 `rejected` / `lab_seq = 83`，快照合计 695 文件、3.73 MiB。
+线上实测：83 个 run / **51 `frozen`** / **32 `rejected`** / `lab_seq = 83`，快照合计 695 文件、3.73 MiB；51 个 frozen 的 `metrics_json` 全部非空。
 
 ## 六、这次没做的事
 
-- **没回填指标**（见第四节），所以榜单空着；
+- **29 个 lab 没有 `metrics.csv`**，只有 README 散文 → 判 rejected（见第四节），榜单上只有 51 条；
 - **没迁 `cs_lab*` / `fmab_lab*`**（见第一节）；
 - **没有在 AutoLabs 里重新执行任何一个 lab**——AutoLabs 是控制面，计算发生在你自己的机器上，这条不因为迁移而破例。

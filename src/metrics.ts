@@ -14,6 +14,8 @@ export interface MetricDefinition {
   direction: MetricDirection;
   definition_md: string;
   is_primary: boolean;
+  /** 必报指标：run 少了它就不算通过（平台在 verdict 时自动判这条门禁）。 */
+  required: boolean;
   sort_order: number;
 }
 
@@ -29,6 +31,7 @@ export const METRIC_TEMPLATE: Omit<MetricDefinition, 'version'>[] = [
     direction: 'higher-better',
     is_primary: true,
     sort_order: 1,
+    required: true,
     definition_md:
       '样本外全区间累计收益，复利，初始资金记为 1.0。必须扣全部成本（手续费 + 滑点），必须遵守不重叠交易约束。分母是初始资金，不是最大回撤也不是最大浮盈。',
   },
@@ -39,6 +42,7 @@ export const METRIC_TEMPLATE: Omit<MetricDefinition, 'version'>[] = [
     direction: 'higher-better',
     is_primary: false,
     sort_order: 2,
+    required: true,
     definition_md: '由样本外净值按自然日折算：`(1 + 累计收益) ^ (365 / 覆盖天数) - 1`。覆盖天数按首个交易日到最后一个交易日计。',
   },
   {
@@ -48,6 +52,7 @@ export const METRIC_TEMPLATE: Omit<MetricDefinition, 'version'>[] = [
     direction: 'higher-better',
     is_primary: false,
     sort_order: 3,
+    required: true,
     definition_md: '样本外净值（含未平仓浮盈亏，按收盘价盯市）的最大峰谷回撤，记为负数，-0.15 表示 -15%。越接近 0 越好。',
   },
   {
@@ -57,6 +62,7 @@ export const METRIC_TEMPLATE: Omit<MetricDefinition, 'version'>[] = [
     direction: 'higher-better',
     is_primary: false,
     sort_order: 4,
+    required: true,
     definition_md: '按日收益序列计算：`mean(日收益) / std(日收益) * sqrt(252)`，无风险利率取 0，std 用样本标准差（ddof=1）。日收益为空的日子记 0，不剔除。',
   },
   {
@@ -66,6 +72,7 @@ export const METRIC_TEMPLATE: Omit<MetricDefinition, 'version'>[] = [
     direction: 'neutral',
     is_primary: false,
     sort_order: 5,
+    required: true,
     definition_md: '样本外成交笔数。一手开一手平算一笔；锁仓按一次开仓 + 一次平昨计。',
   },
   {
@@ -75,9 +82,27 @@ export const METRIC_TEMPLATE: Omit<MetricDefinition, 'version'>[] = [
     direction: 'higher-better',
     is_primary: false,
     sort_order: 6,
+    required: true,
     definition_md: '样本外交易数 / 样本外交易日数。硬约束是 `>= 1.0`，低于该值的实验只能作为研究 baseline，不能进入 SOTA。',
   },
 ];
+
+/**
+ * 必报指标缺了哪些：值必须是有限数字，null / 缺键 / 字符串都算没报。
+ * 这条判定属于平台，不由机器上报的门禁决定。
+ */
+export function missingRequiredMetrics(
+  definitions: { key: string; required?: boolean | number }[],
+  reported: Record<string, unknown> | null,
+): string[] {
+  return definitions
+    .filter((definition) => Boolean(definition.required))
+    .filter((definition) => {
+      const value = reported ? reported[definition.key] : undefined;
+      return typeof value !== 'number' || !Number.isFinite(value);
+    })
+    .map((definition) => definition.key);
+}
 
 export function validateMetricInput(input: {
   key: string;

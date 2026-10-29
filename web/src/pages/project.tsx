@@ -12,10 +12,12 @@ import {
   downloadSnapshot,
   useCreateRun,
   useFreezeSnapshot,
+  useMetrics,
   useMintToken,
   useProject,
   type SdkLike,
 } from '../api';
+import { formatMetricValue } from '../metrics-format';
 
 type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots';
 
@@ -28,6 +30,7 @@ export function ProjectPage() {
   const createRun = useCreateRun(typed, slug ?? '');
   const freeze = useFreezeSnapshot(typed);
   const mint = useMintToken(typed, slug ?? '');
+  const metricDefs = useMetrics(typed, slug);
   const [tab, setTab] = useState<Tab>('runs');
   const [token, setToken] = useState<string | null>(null);
 
@@ -36,6 +39,21 @@ export function ProjectPage() {
   const runs = detail.data?.runs ?? [];
   const snapshots = detail.data?.snapshots ?? [];
   const frozen = runs.filter((run) => run.state === 'frozen');
+  const definitions = [...(metricDefs.data?.metrics ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+  const primary = definitions.find((metric) => metric.is_primary);
+  // 榜单按主指标排序：数字缺失的沉底，方向按口径来（回撤这种越低越好）。
+  const ranked = [...frozen].sort((left, right) => {
+    const read = (run: (typeof frozen)[number]) => {
+      const value = primary ? run.metrics?.[primary.key] : undefined;
+      return typeof value === 'number' ? value : null;
+    };
+    const a = read(left);
+    const b = read(right);
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return primary?.direction === 'lower-better' ? a - b : b - a;
+  });
   const sotaLab = runs.find((run) => run.id === project?.sota_run_id)?.lab ?? t('label.none');
 
   return (
@@ -136,23 +154,40 @@ export function ProjectPage() {
               <thead>
                 <tr>
                   <th>lab</th>
-                  <th>{t('label.metrics')}</th>
+                  {definitions.length === 0 ? <th>{t('label.metrics')}</th> : null}
+                  {definitions.map((metric) => (
+                    <th key={metric.key}>
+                      {metric.label}
+                      {metric.required ? <span className="ml-1 text-destructive">*</span> : null}
+                    </th>
+                  ))}
                   <th>settled</th>
                 </tr>
               </thead>
               <tbody>
-                {frozen.map((run) => (
+                {ranked.map((run) => (
                   <tr key={run.id}>
                     <td className="font-mono">
                       {run.lab} {run.id === project?.sota_run_id ? <span className="pill pill-frozen">SOTA</span> : null}
                     </td>
-                    <td className="font-mono text-xs">{run.metrics ? JSON.stringify(run.metrics) : '—'}</td>
+                    {definitions.length === 0 ? (
+                      <td className="font-mono text-xs">{run.metrics ? JSON.stringify(run.metrics) : '—'}</td>
+                    ) : null}
+                    {definitions.map((metric) => {
+                      const value = run.metrics?.[metric.key];
+                      return (
+                        <td key={metric.key} className="font-mono text-xs">
+                          {typeof value === 'number' ? formatMetricValue(value, metric.unit) : '—'}
+                        </td>
+                      );
+                    })}
                     <td className="text-xs text-muted-foreground">{when(run.settled_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+          <p className="text-xs text-muted-foreground">带 * 的是必报指标：缺任何一个，run 都不会通过。</p>
         </Section>
       ) : null}
 
