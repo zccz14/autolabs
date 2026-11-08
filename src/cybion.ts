@@ -116,13 +116,14 @@ export interface CybionThread {
 export async function createThread(
   env: Env,
   apiKey: string,
-  input: { externalRef: string; title: string },
+  input: { externalRef: string; title: string; model?: string | null },
 ): Promise<CybionThread> {
   return call<CybionThread>(env, {
     method: 'POST',
     path: '/v1/threads',
     authorization: `Bearer ${apiKey}`,
-    body: { title: input.title, external_ref: input.externalRef },
+    // model 不传就用这个人在 Cybion 里的默认值。
+    body: { title: input.title, external_ref: input.externalRef, ...(input.model ? { model: input.model } : {}) },
   });
 }
 

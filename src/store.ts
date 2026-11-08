@@ -23,6 +23,8 @@ export interface ProjectRow {
   idea_request_record_id: number | null;
   idea_requested_at: number | null;
   /** 研究循环：running 就一直「出思路 → 开实验 → 等结论」，paused 就不开新实验。 */
+  /** 跑实验的 Thread 用哪个模型；空就跟随 Cybion 默认。 */
+  run_model: string | null;
   loop_state: 'running' | 'paused';
   loop_run_id: string | null;
   loop_started_at: number | null;

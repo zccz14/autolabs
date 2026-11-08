@@ -39,6 +39,7 @@ function viewProject(access: Access, extra: Record<string, unknown> = {}) {
     sota_run_id: project.sota_run_id,
     rules_snapshot_id: project.rules_snapshot_id,
     dataset_pin_id: project.dataset_pin_id,
+    run_model: project.run_model,
     loop_state: project.loop_state,
     loop_run_id: project.loop_run_id,
     loop_error: project.loop_error,
@@ -174,6 +175,17 @@ routes.post('/:slug/tokens', async (c) => {
     .run();
   await recordEvent(c.env, 'token.minted', access.project.id, principal.userId, { token_id: minted.id, capabilities });
   return c.json({ token: minted.token, id: minted.id, capabilities, expires_in_days: days }, 201);
+});
+
+/** 项目级设置：现在只有「跑实验用哪个模型」，空字符串表示跟随 Cybion 默认。 */
+routes.post('/:slug/settings', async (c) => {
+  const principal = await authenticate(c.req.raw, c.env);
+  const access = await loadProject(c.env, c.req.param('slug'), principal, 'maintainer', 'write');
+  const payload = await readJson<Record<string, unknown>>(c);
+  const raw = optionalString(payload.run_model, 'run_model', 120)?.trim() ?? '';
+  await c.env.DB.prepare(`UPDATE projects SET run_model = ? WHERE id = ?`).bind(raw || null, access.project.id).run();
+  await recordEvent(c.env, 'project.settings', access.project.id, principal.userId, { run_model: raw || null });
+  return c.json({ run_model: raw || null });
 });
 
 routes.get('/:slug/tokens', async (c) => {

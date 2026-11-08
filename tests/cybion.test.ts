@@ -38,6 +38,15 @@ describe('Cybion 外部集成面', () => {
     });
   });
 
+  it('项目指定了模型就带上，没指定就不带（交给 Cybion 默认）', async () => {
+    const spy = stubFetch(new Response(JSON.stringify({ id: 'thr_1' }), { status: 200 }));
+    await createThread(env, 'k', { externalRef: 'r', title: 't', model: 'deepseek-flash' });
+    expect(JSON.parse(spy.mock.calls[0]![1]!.body as string)).toEqual({ title: 't', external_ref: 'r', model: 'deepseek-flash' });
+
+    await createThread(env, 'k', { externalRef: 'r', title: 't', model: null });
+    expect(JSON.parse(spy.mock.calls[1]![1]!.body as string)).toEqual({ title: 't', external_ref: 'r' });
+  });
+
   it('首条输入走 /v1/threads/{id}/inputs', async () => {
     const spy = stubFetch(new Response(JSON.stringify({ thread_id: 'thr_1', record_idx: 3, status: 'queued' }), { status: 200 }));
 
