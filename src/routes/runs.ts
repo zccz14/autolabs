@@ -20,6 +20,7 @@ import {
 import { matchMetrics, missingRequiredMetrics } from '../metrics';
 import { createThread, sendInput } from '../cybion';
 import { mintProjectToken } from '../tokens';
+import { cybionKeyFor } from '../credentials';
 import { buildRunBrief, withExclusion } from '../runs';
 import { viewRun } from './projects';
 import { blobKey } from './snapshots';
@@ -196,9 +197,11 @@ async function startRunThread(
   run: RunRow,
   actorUserId: string,
 ): Promise<RunRow> {
+  // 用这一轮创建者自己的 Cybion 凭据；他没换过就用 Worker 里的服务级 key。
+  const apiKey = await cybionKeyFor(env, run.created_by);
   let threadId = run.cybion_thread_id;
   if (!threadId) {
-    const thread = await createThread(env, {
+    const thread = await createThread(env, apiKey, {
       externalRef: run.external_ref,
       title: `${labLabel(run.lab_no)} · ${project.name}`,
     });
@@ -238,7 +241,7 @@ async function startRunThread(
     verdictToken: minted.token,
     tokenExpiresAt: expiresAt,
   });
-  await sendInput(env, threadId, brief);
+  await sendInput(env, apiKey, threadId, brief);
   await env.DB.batch([
     env.DB.prepare(`UPDATE runs SET state = 'dispatched' WHERE id = ? AND state = 'proposed'`).bind(run.id),
     env.DB.prepare(`INSERT INTO events (id, project_id, kind, payload, actor_user_id, created_at) VALUES (?, ?, 'run.dispatched', ?, ?, ?)`).bind(

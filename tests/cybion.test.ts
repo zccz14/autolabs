@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CybionError, createThread, sendInput } from '../src/cybion';
+import { CybionError, createThread, mintApiKey, revokeApiKey, sendInput } from '../src/cybion';
 import type { Env } from '../src/env';
 
 const env = {
@@ -25,7 +25,7 @@ describe('Cybion 外部集成面', () => {
       }),
     );
 
-    const thread = await createThread(env, { externalRef: 'autolabs:q-labs:lab-0083', title: 'lab-0083 · q-labs' });
+    const thread = await createThread(env, 'cyb_user_secret', { externalRef: 'autolabs:q-labs:lab-0083', title: 'lab-0083 · q-labs' });
 
     expect(thread.id).toBe('thr_1');
     const [url, init] = spy.mock.calls[0]!;
@@ -41,25 +41,48 @@ describe('Cybion 外部集成面', () => {
   it('首条输入走 /v1/threads/{id}/inputs', async () => {
     const spy = stubFetch(new Response(JSON.stringify({ thread_id: 'thr_1', record_idx: 3, status: 'queued' }), { status: 200 }));
 
-    await sendInput(env, 'thr_1', '# lab-0001');
+    await sendInput(env, 'cyb_user_secret', 'thr_1', '# lab-0001');
 
     const [url, init] = spy.mock.calls[0]!;
     expect(String(url)).toBe('https://cybion.test/v1/threads/thr_1/inputs');
     expect(JSON.parse(init!.body as string)).toEqual({ input: '# lab-0001' });
   });
 
-  it('没配地址或 key 时说清楚缺什么，不去打网络', async () => {
+  it('没配地址时说清楚缺什么，不去打网络', async () => {
     const spy = stubFetch(new Response('{}', { status: 200 }));
-    await expect(createThread({} as Env, { externalRef: 'x', title: 'y' })).rejects.toBeInstanceOf(CybionError);
-    await expect(createThread({} as Env, { externalRef: 'x', title: 'y' })).rejects.toThrow(/CYBION_BASE_URL/);
-    await expect(createThread({ CYBION_BASE_URL: 'https://cybion.test' } as Env, { externalRef: 'x', title: 'y' })).rejects.toThrow(
-      /CYBION_API_KEY/,
-    );
+    await expect(createThread({} as Env, 'k', { externalRef: 'x', title: 'y' })).rejects.toBeInstanceOf(CybionError);
+    await expect(createThread({} as Env, 'k', { externalRef: 'x', title: 'y' })).rejects.toThrow(/CYBION_BASE_URL/);
     expect(spy).not.toHaveBeenCalled();
   });
 
   it('把 Cybion 的错误原文带出来，不吞成「失败」两个字', async () => {
     stubFetch(new Response(JSON.stringify({ error: 'invalid API key' }), { status: 401 }));
-    await expect(sendInput(env, 'thr_1', 'hi')).rejects.toThrow(/401：invalid API key/);
+    await expect(sendInput(env, 'k', 'thr_1', 'hi')).rejects.toThrow(/401：invalid API key/);
+  });
+});
+
+describe('用 JWT 换 Cybion 凭据', () => {
+  it('拿当前登录的 JWT 打 /api/api-keys，key 明文只在这一次返回', async () => {
+    const spy = stubFetch(
+      new Response(JSON.stringify({ id: 'key_1', label: 'AutoLabs', prefix: '0afada0f04', created_at: 1, last_used_at: null, secret: 'cyb_u_secret' }), {
+        status: 200,
+      }),
+    );
+
+    const minted = await mintApiKey(env, 'jwt-with-cybion-audience', 'AutoLabs');
+
+    expect(minted.secret).toBe('cyb_u_secret');
+    const [url, init] = spy.mock.calls[0]!;
+    expect(String(url)).toBe('https://cybion.test/api/api-keys');
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer jwt-with-cybion-audience');
+    expect(JSON.parse(init!.body as string)).toEqual({ label: 'AutoLabs' });
+  });
+
+  it('吊销旧 key 走 DELETE /api/api-keys/{id}', async () => {
+    const spy = stubFetch(new Response(null, { status: 204 }));
+    await revokeApiKey(env, 'jwt', 'key_1');
+    const [url, init] = spy.mock.calls[0]!;
+    expect(String(url)).toBe('https://cybion.test/api/api-keys/key_1');
+    expect(init!.method).toBe('DELETE');
   });
 });

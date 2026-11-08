@@ -9,8 +9,10 @@ export interface Env {
   FIRMAMENT_BASE_URL?: string;
   /** Cybion 的基地址；开一轮实验要往这里建 Thread。 */
   CYBION_BASE_URL?: string;
-  /** Cybion 外部集成面的 API key（cyb_…），只放在 Worker secret 里。 */
+  /** Cybion 外部集成面的 API key（cyb_…），只放在 Worker secret 里；没换过凭据的人用它。 */
   CYBION_API_KEY?: string;
+  /** 密封 cybion_credentials.sealed 的 AES-GCM 密钥（32 字节 base64），只在 Worker secret 里。 */
+  CREDENTIALS_KEY?: string;
   /** 仅本地开发：把 identity 固定成这个用户，生产环境永远不设置。 */
   DEV_USER_ID?: string;
 }

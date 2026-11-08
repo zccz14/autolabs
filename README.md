@@ -56,7 +56,7 @@ proposed → dispatched → running → frozen | rejected | lost
 开 run 就是**发出**这一轮，不是先登记再手动绑 Thread：
 
 1. 平台分配 `lab-000N` 与 `external_ref = autolabs:<slug>:<lab-000N>`，钉住输入快照。
-2. 平台用 Worker 里的 Cybion API key（`CYBION_API_KEY`，只存在 secret 里）在这一轮的 owner 的 Cybion 里开一个 Thread，标题是 `lab-000N · <项目名>`。
+2. 平台用**开 run 那个人自己的** Cybion API key 在这一轮的 owner 的 Cybion 里开一个 Thread，标题是 `lab-000N · <项目名>`。这把 key 是他在工作台点「用当前登录换一把」换来的：那一刻用登录拿到的、带 `cybion.ntnl.io` audience 的 JWT 调 `POST /api/api-keys`，换到不会过期的 key 后密封存进库（`cybion_credentials`，`CREDENTIALS_KEY` 加密）。没换过的人回退到 Worker 里的服务级 `CYBION_API_KEY`。
 3. 平台给这一轮签一把只覆盖 `read/write/verdict` 的项目凭据，连同「要验什么、文件在哪、指标口径、结论往哪报」写成第一条输入发进 Thread——这一步才真正开始跑。
 4. Thread id 写回这一行、状态置 `dispatched`。
 
@@ -107,6 +107,7 @@ curl -sX PUT --data-binary @outputs/canonical.txt \
 | `GET` `POST` | `/api/v1/projects/{slug}/metrics` | 指标契约（每次写入 = 新版本） |
 | `POST` | `/api/v1/projects/{slug}/metrics/{key}/retire` | 退役一个指标 |
 | `GET` `POST` | `/api/v1/projects/{slug}/dataset` | 当前数据集 pin / 绑定新 pin |
+| `GET` `POST` `DELETE` | `/api/v1/cybion/credentials` | 我的 Cybion 凭据：状态 / 用当前登录换一把 / 吊销 |
 | `GET` | `/api/v1/firmament/datasets` | Firmament 数据集目录（token 透传） |
 | `GET` | `/api/v1/projects/{slug}/leaderboard` | 榜单（带指标定义与顺序） |
 | `POST` | `/api/v1/projects/{slug}/sota` | 晋升 / 降级 / 排除 |

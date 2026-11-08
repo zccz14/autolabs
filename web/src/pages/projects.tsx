@@ -4,9 +4,62 @@ import { PlusIcon } from 'lucide-react';
 import { useAuthMini } from 'auth-mini-react-components';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Empty, ErrorNote, Field, Section } from '../ui';
+import { Empty, ErrorNote, Field, Section, when } from '../ui';
 import { useCopy } from '../copy';
-import { useCreateProject, useProjects, type SdkLike } from '../api';
+import {
+  useCreateProject,
+  useCybionCredential,
+  useDropCybionCredential,
+  useExchangeCybionCredential,
+  useProjects,
+  type SdkLike,
+} from '../api';
+
+/**
+ * Cybion 凭据不是部署时写死的：用当前登录换一把不会过期的 API key，
+ * AutoLabs 密封存下来，之后每轮实验都用它。JWT 只在这一步出现一次。
+ */
+function CybionCredentialCard({ sdk }: { sdk: SdkLike | null }) {
+  const credential = useCybionCredential(sdk);
+  const exchange = useExchangeCybionCredential(sdk);
+  const drop = useDropCybionCredential(sdk);
+  const current = credential.data?.credential ?? null;
+
+  return (
+    <Section
+      title="Cybion 凭据"
+      description="开一轮实验要在你的 Cybion 里建 Thread。换一把不会过期的 API key 存在 AutoLabs，之后一直用它——登录拿到的 JWT 只在这一步出现。"
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-xs">
+          {current?.source === 'user'
+            ? `自己的 key｜前缀 ${current.prefix ?? '—'}｜${current.label}｜${when(current.created_at)}`
+            : current?.source === 'service'
+              ? '还没换过，现在用的是 Worker 里的服务级 key'
+              : '还没有任何 Cybion 凭据'}
+        </p>
+        <Button
+          size="sm"
+          disabled={exchange.isPending}
+          onClick={() => exchange.mutate(undefined, { onSuccess: () => credential.refetch() })}
+        >
+          用当前登录换一把
+        </Button>
+        {current?.source === 'user' ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={drop.isPending}
+            onClick={() => drop.mutate(undefined, { onSuccess: () => credential.refetch() })}
+          >
+            吊销
+          </Button>
+        ) : null}
+      </div>
+      <ErrorNote error={credential.error ?? exchange.error ?? drop.error} />
+    </Section>
+  );
+}
 
 export function ProjectsPage() {
   const t = useCopy();
@@ -54,6 +107,8 @@ export function ProjectsPage() {
       </header>
 
       <ErrorNote error={projects.error ?? create.error} />
+
+      <CybionCredentialCard sdk={typed} />
 
       {open ? (
         <Section title={t('action.create')}>
