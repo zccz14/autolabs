@@ -55,12 +55,14 @@ app.all('*', async (c) => {
  * 主循环在 Workflows 里（Phase 2），这里每秒都是兜底。
  */
 async function reconcile(env: Env): Promise<void> {
-  const staleBefore = Math.floor(Date.now() / 1000) - 24 * 3600;
+  // dispatched 意味着 Thread 已经发出去、正在用户自己的机器上跑。跑多久都合理，
+  // 但一直不结算就是丢了：30 天后标记 lost，研究地图上不再假装它还在跑。
+  const staleBefore = Math.floor(Date.now() / 1000) - 30 * 86400;
   const stuck = await env.DB.prepare(
-    `SELECT id, project_id FROM runs WHERE state = 'dispatched' AND cybion_thread_id IS NULL AND created_at < ?`,
+    `SELECT id FROM runs WHERE state = 'dispatched' AND created_at < ?`,
   )
     .bind(staleBefore)
-    .all<{ id: string; project_id: string }>();
+    .all<{ id: string }>();
   for (const run of stuck.results ?? []) {
     await env.DB.prepare(`UPDATE runs SET state = 'lost', settled_at = ? WHERE id = ? AND state = 'dispatched'`)
       .bind(Math.floor(Date.now() / 1000), run.id)

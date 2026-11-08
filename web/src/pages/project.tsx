@@ -81,13 +81,15 @@ export function ProjectPage() {
     createRun.mutate(
       { note, idea_md: idea.trim() },
       {
-        // 创建只是登记：直接落到这一轮的详情页，下一步（绑定 Cybion Thread）就在那里。
+        // 创建即发出：落到这一轮的详情页；没发出去就把原文带过去，好在那一页重试。
         onSuccess: (created) => {
           setOpening(false);
           setIdea('');
           setNote('');
           detail.refetch();
-          navigate(`/runs/${created.run.id}`);
+          navigate(`/runs/${created.run.id}`, {
+            state: created.dispatch.ok ? undefined : { dispatchError: created.dispatch.error ?? '发出失败' },
+          });
         },
       },
     );
