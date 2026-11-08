@@ -405,6 +405,8 @@ export interface ProjectIdea {
   status: 'none' | 'pending' | 'ready' | 'empty' | 'error' | 'unknown';
   idea_md?: string | null;
   requested_at?: number | null;
+  /** 地图没变：这一版思路仍然对得上最新一轮实验，不用再问一遍。 */
+  fresh?: boolean;
   message?: string;
 }
 

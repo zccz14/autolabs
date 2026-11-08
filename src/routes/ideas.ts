@@ -107,26 +107,33 @@ projectIdeaRoutes.get('/:slug/idea', async (c) => {
   const principal = await authenticateOptional(c.req.raw, c.env);
   const access = await loadProject(c.env, c.req.param('slug'), principal);
   const project = access.project;
-  if (!project.idea_thread_id) return c.json({ thread_id: null, status: 'none' });
+  if (!project.idea_thread_id) return c.json({ thread_id: null, status: 'none', fresh: false });
 
   const viewer = principal?.kind === 'user' ? principal.userId : null;
   const owner = project.idea_thread_user_id ?? viewer;
   if (!owner) {
     return c.json({ thread_id: project.idea_thread_id, status: 'unknown', message: '这条思路线程不属于当前身份，读不到它的回复' });
   }
+  // 地图没变（请求晚于最新一轮实验）就别再问一遍：同一个问题不值得烧第二次。
+  const newest = await c.env.DB.prepare(`SELECT MAX(created_at) AS created_at FROM runs WHERE project_id = ?`)
+    .bind(project.id)
+    .first<{ created_at: number | null }>();
+  const fresh = project.idea_requested_at !== null && project.idea_requested_at >= (newest?.created_at ?? 0);
+
   try {
     const apiKey = await cybionKeyFor(c.env, owner);
     const response = await readThreadResponse(c.env, apiKey, project.idea_thread_id);
     // 回复必须是对「最近一次请求」的：旧回复不能当成新思路，否则表单会填上上一轮的内容。
-    const fresh = response?.input_record_id != null && response.input_record_id === project.idea_request_record_id;
+    const matched = response?.input_record_id != null && response.input_record_id === project.idea_request_record_id;
     // 只有这一轮真的说完了才算有结果：in_flight 时它可能连 assistant message 都还没写出来。
-    const finished = fresh && response?.status === 'completed';
+    const finished = matched && response?.status === 'completed';
     const idea = finished ? extractIdea(response) : null;
     return c.json({
       thread_id: project.idea_thread_id,
-      status: !fresh ? 'pending' : !finished ? 'pending' : idea ? 'ready' : 'empty',
+      status: !matched ? 'pending' : !finished ? 'pending' : idea ? 'ready' : 'empty',
       idea_md: idea,
       requested_at: project.idea_requested_at,
+      fresh,
     });
   } catch (error) {
     if (error instanceof CybionError) {
