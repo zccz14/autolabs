@@ -58,6 +58,7 @@ export function viewRun(run: RunRow) {
     metric_set: run.metric_set_json ? JSON.parse(run.metric_set_json) : [],
     cybion_thread_id: run.cybion_thread_id,
     note: run.note,
+    idea_md: run.idea_md,
     report_md: run.report_md,
     metrics: run.metrics_json ? JSON.parse(run.metrics_json) : null,
     gates: run.gates_json ? JSON.parse(run.gates_json) : [],

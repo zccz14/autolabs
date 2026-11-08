@@ -113,6 +113,7 @@ export interface RunView {
   metric_set: { key: string; version: number }[];
   cybion_thread_id: string | null;
   note: string;
+  idea_md: string | null;
   report_md: string | null;
   metrics: Record<string, unknown> | null;
   gates: { rule_id: string; pass: boolean; evidence: string | null }[];
