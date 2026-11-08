@@ -5,42 +5,82 @@ on:
     workflows: [pr-check]
     types: [completed]
     branches: [main]
+  # 手工重跑：改了 secret、或在 Actions 里重新上线一次当前 main，不用空提交。
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# 两次合并先后到达时，部署要按顺序跑完，不能互相插队（D1 迁移 + Worker 上传）。
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     steps:
-      - name: Check for a Cloudflare credential
-        id: guard
-        run: echo "enabled=${{ secrets.CLOUDFLARE_API_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      # 缺凭据时以前是「跳过并报 success」——那会让一次没上线的合并看起来像上线了。
+      # 现在它红：CI/CD 没配好，这件事本身就该被看见。
+      - name: Require a Cloudflare credential
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "$TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$ACCOUNT" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=部署未配置::仓库缺少:$missing。main 的改动不会上线。"
+            {
+              echo "## 部署没有执行"
+              echo ""
+              echo "仓库缺少 secret：\`${missing# }\`。"
+              echo ""
+              echo "配置一次即可（最小权限 token）："
+              echo '```sh'
+              echo 'gh secret set CLOUDFLARE_API_TOKEN -R zccz14/autolabs   # Workers Scripts:Edit / Workers Routes:Edit / D1:Edit'
+              echo 'gh secret set CLOUDFLARE_ACCOUNT_ID -R zccz14/autolabs  # b831a34938a75457b5029d31cea13c25'
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
       - uses: actions/checkout@v7
-        if: steps.guard.outputs.enabled == 'true'
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
-        if: steps.guard.outputs.enabled == 'true'
         with:
           version: 11.22.0
       - uses: actions/setup-node@v7
-        if: steps.guard.outputs.enabled == 'true'
         with:
           node-version: 24
           cache: pnpm
-      - if: steps.guard.outputs.enabled == 'true'
-        run: pnpm install --frozen-lockfile
-      - if: steps.guard.outputs.enabled == 'true'
+      - run: pnpm install --frozen-lockfile
+      - name: Apply D1 migrations
         run: pnpm exec wrangler d1 migrations apply autolabs --remote --config wrangler.jsonc
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - if: steps.guard.outputs.enabled == 'true'
+      - name: Build and deploy the Worker
         run: pnpm deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - if: steps.guard.outputs.enabled != 'true'
-        run: echo "CLOUDFLARE_API_TOKEN 未配置，跳过部署（部署由维护者在本机执行）。"
+      # 上线后自己验一遍：首页要 200，带 Cybion iss 的令牌必须落到 Thread 那条验证分支。
+      # 上一版就是因为 iss 解码失败静默掉进 Auth Mini 分支，单测和类型检查都没拦住。
+      - name: Smoke test the deployment
+        run: |
+          set -euo pipefail
+          base=https://autolabs.ntnl.io
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$base/")
+          test "$code" = 200 || { echo "::error::首页返回 $code"; exit 1; }
+          segment() { printf '%s' "$1" | base64 | tr -d '\n' | tr '+/' '-_' | tr -d '='; }
+          token="$(segment '{"alg":"EdDSA","kid":"smoke"}').$(segment '{"iss":"https://cybion.ntnl.io","sub":"00000000-0000-0000-0000-000000000000","exp":9999999999}').c2ln"
+          body=$(curl -sS --max-time 20 -H "Authorization: Bearer $token" "$base/api/v1/projects/smoke/whoami" || true)
+          case "$body" in
+            *"Thread 令牌"*) echo "Thread 身份分支在线：$body" ;;
+            *) echo "::error::带 Cybion issuer 的令牌没有走到 Thread 分支：$body"; exit 1 ;;
+          esac
