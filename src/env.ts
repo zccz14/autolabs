@@ -11,6 +11,8 @@ export interface Env {
   APP_ORIGIN?: string;
   /** Cybion 的基地址；开一轮实验要往这里建 Thread。 */
   CYBION_BASE_URL?: string;
+  /** Cybion 公钥的地址；默认 https://cybion.ntnl.io/.well-known/jwks.json，测试与自建部署可覆盖。 */
+  CYBION_JWKS_URL?: string;
   /** Cybion 外部集成面的 API key（cyb_…），只放在 Worker secret 里；后台换不到人凭据时兜底。 */
   CYBION_API_KEY?: string;
   /** 密封 cybion_credentials.sealed 的 AES-GCM 密钥（32 字节 base64），只在 Worker secret 里。 */

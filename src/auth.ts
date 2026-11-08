@@ -4,12 +4,17 @@ import { fail } from './http';
 import { nowSeconds } from './ids';
 import { parseProjectToken, tokenFingerprint } from './tokens';
 
+/** Cybion 签 Thread 令牌用的 issuer；公钥发布在它的 /.well-known/jwks.json。 */
+export const CYBION_ISSUER = 'https://cybion.ntnl.io';
+
 export interface Principal {
-  kind: 'user' | 'token';
-  /** Auth Mini 的 sub；token 身份时是签发人。 */
+  kind: 'user' | 'token' | 'thread';
+  /** Auth Mini 的 sub；token 与 thread 身份时是它替谁干活。 */
   userId: string;
-  /** token 身份绑定的项目，user 身份为 undefined。 */
+  /** token 与 thread 身份绑定的项目，user 身份为 undefined。 */
   projectId?: string;
+  /** thread 身份绑定的那一轮 run；思路 Thread 不绑 run，为 undefined。 */
+  runId?: string;
   capabilities: string[];
   tokenId?: string;
 }
@@ -29,6 +34,73 @@ function keySet(issuer: string): Jwks {
     keySets.set(issuer, cached);
   }
   return cached;
+}
+
+/**
+ * Cybion 的 Thread 公钥。每个 isolate 缓存一份，jose 自己负责刷新。
+ * 令牌只有 60 秒，所以这里不需要长缓存——按 `kid` 选键、未知 kid 时刷新一次就够了。
+ */
+const threadKeySets = new Map<string, Jwks>();
+
+function threadKeySet(env: Env): Jwks {
+  const url = env.CYBION_JWKS_URL ?? `${CYBION_ISSUER}/.well-known/jwks.json`;
+  let cached = threadKeySets.get(url);
+  if (!cached) {
+    cached = createRemoteJWKSet(new URL(url), { cacheMaxAge: 600_000, cooldownDuration: 30_000 });
+    threadKeySets.set(url, cached);
+  }
+  return cached;
+}
+
+/** 不验签地读出 `iss`，只用来决定走哪条校验路径；两条路径各自完整验签。 */
+function issuerOf(token: string): string | null {
+  const segment = token.split('.')[1];
+  if (!segment) return null;
+  try {
+    const json = atob(segment.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(json) as { iss?: unknown };
+    return typeof payload.iss === 'string' ? payload.iss : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Thread 身份：Cybion 签的 JWT，`sub` 是那条 Thread。
+ * 令牌本身不带权限，权限来自「这条 Thread 在 AutoLabs 里绑了什么」——
+ * 绑了某一轮 run 就是那一轮的执行体，绑了项目的思路线程就只读。
+ */
+async function authenticateThread(raw: string, env: Env): Promise<Principal> {
+  let threadId: string;
+  try {
+    const { payload } = await jwtVerify(raw, threadKeySet(env), {
+      issuer: CYBION_ISSUER,
+      algorithms: ['EdDSA'],
+    });
+    if (!payload.sub) return fail(401, 'unauthorized', 'Thread 令牌缺少 sub');
+    threadId = payload.sub;
+  } catch {
+    return fail(401, 'unauthorized', 'Thread 令牌无效或已过期：调用 create_thread_token 重新签发一张');
+  }
+  const run = await env.DB.prepare(`SELECT id, project_id, created_by FROM runs WHERE cybion_thread_id = ?`)
+    .bind(threadId)
+    .first<{ id: string; project_id: string; created_by: string }>();
+  if (run) {
+    return {
+      kind: 'thread',
+      userId: run.created_by,
+      projectId: run.project_id,
+      runId: run.id,
+      capabilities: ['read', 'write', 'verdict'],
+    };
+  }
+  const project = await env.DB.prepare(`SELECT id, owner_user_id FROM projects WHERE idea_thread_id = ?`)
+    .bind(threadId)
+    .first<{ id: string; owner_user_id: string }>();
+  if (project) {
+    return { kind: 'thread', userId: project.owner_user_id, projectId: project.id, capabilities: ['read'] };
+  }
+  return fail(401, 'unauthorized', '这条 Thread 没有绑定 AutoLabs 的任何东西');
 }
 
 /** Authorization: Bearer <token> 里的那一段。 */
@@ -75,6 +147,7 @@ export async function authenticate(request: Request, env: Env): Promise<Principa
   if (!raw) fail(401, 'unauthorized', '缺少 Authorization: Bearer');
   if (env.DEV_USER_ID && raw === 'dev') return { kind: 'user', userId: env.DEV_USER_ID, capabilities: ['*'] };
   if (raw.startsWith('alb_')) return authenticateToken(raw, env);
+  if (issuerOf(raw) === CYBION_ISSUER) return authenticateThread(raw, env);
   try {
     const { payload } = await jwtVerify(raw, keySet(env.AUTH_ISSUER), {
       issuer: env.AUTH_ISSUER,

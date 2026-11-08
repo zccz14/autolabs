@@ -34,7 +34,6 @@ export interface IdeaBriefInput {
   metrics: IdeaBriefMetric[];
   runs: IdeaBriefRun[];
   /** 只读令牌：让它按需取某一轮的全文，而不是把几十个实验全塞进提示词。 */
-  readerToken?: string;
   /** AutoLabs 的对外地址，拼接口地址用。 */
   origin?: string;
 }
@@ -124,14 +123,14 @@ export function buildIdeaBrief(input: IdeaBriefInput): string {
     : '- （这个项目还没有定义指标契约）';
 
   const drillDown =
-    input.readerToken && input.origin
+    input.origin
       ? `## 要细节自己去取
 
 上面每个实验只留了一行。需要某一轮的完整思路、结果、指标与门禁时再取，别一次全拉：
 
 - 整个项目：\`GET ${input.origin}/api/v1/projects/${input.projectSlug}/runs\`
 - 单轮：\`GET ${input.origin}/api/v1/runs/<run_id>\`（run_id 在上面那个接口的返回里）
-- 请求头：\`Authorization: Bearer ${input.readerToken}\`（只读，30 天到期）`
+- 请求头：\`Authorization: Bearer <create_thread_token 返回的 token>\`（现签一张，60 秒内有效；401 就再签一张）`
       : '';
 
   return `# 这条研究线的下一轮

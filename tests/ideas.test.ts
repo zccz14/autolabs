@@ -18,7 +18,6 @@ const brief = buildIdeaBrief({
       definition_md: '年化收益 / 年化波动，无风险利率取 0。',
     },
   ],
-  readerToken: 'alb_read_secret',
   origin: 'https://autolabs.ntnl.io',
   runs: [
     {
@@ -116,8 +115,7 @@ describe('地图不能把几十个实验全文倒进去', () => {
     sotaLab: 'lab-0001',
     metrics,
     runs: many,
-    readerToken: 'alb_read_secret',
-    origin: 'https://autolabs.ntnl.io',
+      origin: 'https://autolabs.ntnl.io',
   });
 
   it('83 个实验压在一万六千字以内（原来倒全文是四万三千字）', () => {
@@ -132,9 +130,10 @@ describe('地图不能把几十个实验全文倒进去', () => {
     expect(compact).toContain('挂 no-future-leak（用了同日收盘后的排名');
   });
 
-  it('给一把只读令牌与两个接口，细节自己去取', () => {
+  it('给两个接口和一句话「令牌自己现签」，细节自己去取', () => {
     expect(compact).toContain('GET https://autolabs.ntnl.io/api/v1/projects/q-labs/runs');
-    expect(compact).toContain('Authorization: Bearer alb_read_secret');
+    expect(compact).toContain('create_thread_token');
+    expect(compact).not.toContain('alb_');
     expect(compact).toContain('别一次全拉');
   });
 });

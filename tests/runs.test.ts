@@ -45,8 +45,6 @@ describe('发给 Thread 的第一条输入', () => {
         definition_md: '年化收益 / 年化波动，无风险利率取 0。',
       },
     ],
-    verdictToken: 'alb_tok_secret',
-    tokenExpiresAt: 1800000000,
   });
 
   it('把这一轮要验什么、文件在哪、结论往哪报都写清楚', () => {
@@ -54,7 +52,10 @@ describe('发给 Thread 的第一条输入', () => {
     expect(brief).toContain('把信号窗口从 5 日拉到 20 日');
     expect(brief).toContain('https://autolabs.ntnl.io/api/v1/snapshots/snp_1/manifest');
     expect(brief).toContain('https://autolabs.ntnl.io/api/v1/runs/run_abc/verdict');
-    expect(brief).toContain('Bearer alb_tok_secret');
+    // 简报里不再有长期凭据：令牌要它自己现签。
+    expect(brief).toContain('create_thread_token');
+    expect(brief).toContain('Authorization: Bearer <create_thread_token 返回的 token>');
+    expect(brief).not.toContain('alb_');
   });
 
   it('指标口径带着 key、单位与必报标记一起下发', () => {
@@ -75,8 +76,6 @@ describe('发给 Thread 的第一条输入', () => {
       idea: null,
       note: '跑一次基线',
       metrics: [],
-      verdictToken: 'alb_x_y',
-      tokenExpiresAt: 1800000000,
     });
     expect(fallback).toContain('跑一次基线');
     expect(fallback).toContain('这个项目还没有定义指标');

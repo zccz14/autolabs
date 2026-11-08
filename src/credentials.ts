@@ -33,12 +33,15 @@ export interface CredentialRow {
 /** 这次请求能证明的身份：为谁干活，以及手上有没有那个人的登录 JWT。 */
 export interface Caller {
   userId: string;
-  /** Auth Mini 签发的 access token；机器凭据（`alb_…`）时为 null。 */
+  /** Auth Mini 签发的 access token；机器凭据（`alb_…`）与 Thread 令牌都为 null。 */
   jwt: string | null;
 }
 
-/** 把一次请求里的身份翻译成 Caller：机器凭据没有登录 JWT，也就换不了 key。 */
-export function callerOf(request: Request, principal: { kind: 'user' | 'token'; userId: string }): Caller {
+/** 把一次请求里的身份翻译成 Caller：机器凭据与 Thread 都没有登录 JWT，也就换不了 key。 */
+export function callerOf(
+  request: Request,
+  principal: { kind: 'user' | 'token' | 'thread'; userId: string },
+): Caller {
   return { userId: principal.userId, jwt: principal.kind === 'user' ? bearerOf(request) : null };
 }
 
