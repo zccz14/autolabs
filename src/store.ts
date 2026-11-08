@@ -22,6 +22,13 @@ export interface ProjectRow {
   /** 最近一次请它出主意的那条输入，用来判断回复是不是新的。 */
   idea_request_record_id: number | null;
   idea_requested_at: number | null;
+  /** 研究循环：running 就一直「出思路 → 开实验 → 等结论」，paused 就不开新实验。 */
+  loop_state: 'running' | 'paused';
+  loop_run_id: string | null;
+  loop_started_at: number | null;
+  loop_paused_at: number | null;
+  loop_last_tick_at: number | null;
+  loop_error: string | null;
 }
 
 export interface SnapshotRow {

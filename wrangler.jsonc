@@ -30,11 +30,12 @@
     "AUTH_AUDIENCE": "autolabs.ntnl.io",
     "FIRMAMENT_BASE_URL": "https://firma.ntnl.io",
     // 开一轮实验要真的建 Thread：地址是公开的，凭证 CYBION_API_KEY 在 Worker secret 里。
-    "CYBION_BASE_URL": "https://cybion.ntnl.io"
+    "CYBION_BASE_URL": "https://cybion.ntnl.io",
+    "APP_ORIGIN": "https://autolabs.ntnl.io"
   },
 
   "routes": [{ "pattern": "autolabs.ntnl.io", "custom_domain": true }],
 
-  // 对账器：只做救援，不做主循环。任何 run 都不允许永远停在 dispatched。
-  "triggers": { "crons": ["*/15 * * * *"] }
+  // 每分钟一拍：研究循环的心跳 + 对账救援。每一拍都从库里重新判断，重复执行安全。
+  "triggers": { "crons": ["* * * * *"] }
 }

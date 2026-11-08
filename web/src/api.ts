@@ -64,6 +64,13 @@ export interface ProjectSummary {
   owner_user_id: string;
   created_at: number;
   role: string;
+  /** 研究循环：running 就一直推进，paused 就不开新实验。 */
+  loop_state?: 'running' | 'paused';
+  loop_run_id?: string | null;
+  loop_error?: string | null;
+  loop_started_at?: number | null;
+  loop_paused_at?: number | null;
+  loop_last_tick_at?: number | null;
 }
 
 export interface MetricView {
@@ -397,6 +404,17 @@ export function useStartIdea(sdk: SdkLike | null, slug: string | undefined) {
     mutationFn: () =>
       api<{ thread_id: string; status: string; record_idx: number }>(sdk as SdkLike, `/api/v1/projects/${slug}/idea`, {
         method: 'POST',
+      }),
+  });
+}
+
+/** 启动 / 暂停研究循环：启动之后没有人在环，暂停就不开新实验。 */
+export function useLoopControl(sdk: SdkLike | null, slug: string | undefined) {
+  return useMutation({
+    mutationFn: (action: 'start' | 'pause') =>
+      api<{ loop_state: 'running' | 'paused' }>(sdk as SdkLike, `/api/v1/projects/${slug}/loop`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
       }),
   });
 }
