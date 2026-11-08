@@ -52,12 +52,18 @@ function threadKeySet(env: Env): Jwks {
   return cached;
 }
 
-/** 不验签地读出 `iss`，只用来决定走哪条校验路径；两条路径各自完整验签。 */
-function issuerOf(token: string): string | null {
+/**
+ * 不验签地读出 `iss`，只用来决定走哪条校验路径；两条路径各自完整验签。
+ *
+ * JWT 的段是无 padding 的 base64url，`atob` 却不接受缺 padding 的输入，
+ * 所以先补齐再解码——这一步错了会让 Thread 令牌静默掉进 Auth Mini 那条分支。
+ */
+export function issuerOf(token: string): string | null {
   const segment = token.split('.')[1];
   if (!segment) return null;
   try {
-    const json = atob(segment.replace(/-/g, '+').replace(/_/g, '/'));
+    const padded = segment.replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='));
     const payload = JSON.parse(json) as { iss?: unknown };
     return typeof payload.iss === 'string' ? payload.iss : null;
   } catch {
