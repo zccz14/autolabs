@@ -16,6 +16,7 @@ import {
   useCreateRun,
   useFreezeSnapshot,
   useMetrics,
+  useLoopControl,
   useProject,
   useProjectIdea,
   useStartIdea,
@@ -58,6 +59,7 @@ export function ProjectPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [opening, setOpening] = useState(false);
   const startIdea = useStartIdea(typed, slug);
+  const loop = useLoopControl(typed, slug);
   // 项目页一打开就问一次状态：地图没变的话，开表单是直接复用，不再烧一轮。
   const ideaQuery = useProjectIdea(typed, slug, Boolean(slug));
   // 趋势图默认画主指标；用户可以按指标切。
@@ -93,6 +95,8 @@ export function ProjectPage() {
     return primary?.direction === 'lower-better' ? a - b : b - a;
   });
   const sotaLab = runs.find((run) => run.id === project?.sota_run_id)?.lab ?? t('label.none');
+  const loopRunning = project?.loop_state === 'running';
+  const loopRun = runs.find((run) => run.id === project?.loop_run_id);
   const trendMetric = definitions.find((metric) => metric.key === trendKey) ?? primary ?? definitions[0] ?? null;
   const trendPoints: MetricPoint[] = trendMetric
     ? runs
@@ -153,6 +157,18 @@ export function ProjectPage() {
           <Button variant="outline" size="sm" onClick={() => detail.refetch()}>
             {t('action.refresh')}
           </Button>
+          <Button
+            size="sm"
+            variant={loopRunning ? 'outline' : 'default'}
+            disabled={loop.isPending}
+            onClick={() =>
+              loop.mutate(loopRunning ? 'pause' : 'start', {
+                onSuccess: () => detail.refetch(),
+              })
+            }
+          >
+            {loopRunning ? '暂停研究' : '启动研究'}
+          </Button>
           <Button size="sm" variant={opening ? 'outline' : 'default'} onClick={toggleOpening}>
             <PlayIcon />
             {t('action.newRun')}
@@ -160,7 +176,15 @@ export function ProjectPage() {
         </div>
       </header>
 
-      <ErrorNote error={detail.error ?? createRun.error ?? freeze.error} />
+      <ErrorNote error={detail.error ?? createRun.error ?? freeze.error ?? loop.error} />
+
+      {loopRun || project?.loop_error ? (
+        <p className={`text-xs ${project?.loop_error ? 'text-destructive' : 'text-muted-foreground'}`}>
+          {project?.loop_error
+            ? `研究循环已停：${project.loop_error}`
+            : `研究循环运行中：${loopRun ? `${loopRun.lab} ${loopRun.state}` : '正在决定下一轮'}｜上一拍 ${when(project?.loop_last_tick_at ?? null)}`}
+        </p>
+      ) : null}
 
       {opening ? (
         <Section title={t('action.newRun')} description={t('desc.newRun')}>

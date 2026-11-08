@@ -35,37 +35,15 @@ projectRunRoutes.get('/:slug/runs', async (c) => {
 });
 
 /** 开一轮实验：编号由项目原子分配，external_ref 是往 Cybion 开 Thread 的幂等键。 */
+/** 开一轮实验：编号由项目原子分配，external_ref 是往 Cybion 开 Thread 的幂等键。 */
 projectRunRoutes.post('/:slug/runs', async (c) => {
   const principal = await authenticate(c.req.raw, c.env);
   const access = await loadProject(c.env, c.req.param('slug'), principal, 'runner', 'write');
   const payload = await readJson<Record<string, unknown>>(c);
   const note = optionalString(payload.note, 'note', 2000) ?? '';
   const idea = optionalString(payload.idea_md, 'idea_md', 20000) ?? null;
-  const requestedSnapshot = optionalString(payload.input_snapshot_id, 'input_snapshot_id', 80);
-  const snapshot = requestedSnapshot
-    ? await latestSnapshot(c.env, access.project.id)
-    : await latestSnapshot(c.env, access.project.id);
-  const inputSnapshotId = requestedSnapshot ?? snapshot?.id;
-  if (!inputSnapshotId) return fail(409, 'no_snapshot', '项目还没有任何快照，先上传实验文件');
-
-  const labNo = await allocateLabNo(c.env, access.project.id);
-  const id = newId('run');
-  const ref = externalRef(access.project.slug, labNo);
-  const createdAt = nowSeconds();
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO runs (id, project_id, lab_no, external_ref, state, input_snapshot_id, dataset_pin_id, note, idea_md, created_by, created_at)
-       VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, access.project.id, labNo, ref, inputSnapshotId, access.project.dataset_pin_id, note, idea, principal.userId, createdAt),
-    c.env.DB.prepare(`INSERT INTO events (id, project_id, kind, payload, actor_user_id, created_at) VALUES (?, ?, 'run.proposed', ?, ?, ?)`).bind(
-      newId('evt'),
-      access.project.id,
-      JSON.stringify({ run_id: id, lab: labLabel(labNo) }),
-      principal.userId,
-      createdAt,
-    ),
-  ]);
-  const run = (await findRun(c.env, id)) as RunRow;
+  const run = await openRun(c.env, access.project, principal.userId, { idea, note });
+  if (!run) return fail(409, 'no_snapshot', '项目还没有任何快照，先上传实验文件');
   // 开一轮实验＝真的把这一轮发出去：建 Thread、发首条输入、置 dispatched。
   // 发不出去就留在 proposed，把原文回给调用方——不假装发出去了。
   const dispatched = await startRunThread(
@@ -84,7 +62,7 @@ projectRunRoutes.post('/:slug/runs', async (c) => {
       });
       return { ok: false as const, error: error.message };
     });
-  const latest = dispatched.ok ? dispatched.run : ((await findRun(c.env, id)) as RunRow);
+  const latest = dispatched.ok ? dispatched.run : ((await findRun(c.env, run.id)) as RunRow);
   return c.json(
     {
       run: viewRun(latest),
@@ -93,6 +71,38 @@ projectRunRoutes.post('/:slug/runs', async (c) => {
     201,
   );
 });
+
+/**
+ * 登记一轮实验（state=proposed）。研究循环与界面上的「开新一轮实验」共用这一段，
+ * 免得两边的编号、快照、事件写法各走各的。
+ */
+export async function openRun(
+  env: Env,
+  project: { id: string; slug: string; dataset_pin_id: string | null },
+  actorUserId: string,
+  input: { idea: string | null; note: string },
+): Promise<RunRow | null> {
+  const snapshot = await latestSnapshot(env, project.id);
+  if (!snapshot) return null;
+  const labNo = await allocateLabNo(env, project.id);
+  const id = newId('run');
+  const ref = externalRef(project.slug, labNo);
+  const createdAt = nowSeconds();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO runs (id, project_id, lab_no, external_ref, state, input_snapshot_id, dataset_pin_id, note, idea_md, created_by, created_at)
+       VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, project.id, labNo, ref, snapshot.id, project.dataset_pin_id, input.note, input.idea, actorUserId, createdAt),
+    env.DB.prepare(`INSERT INTO events (id, project_id, kind, payload, actor_user_id, created_at) VALUES (?, ?, 'run.proposed', ?, ?, ?)`).bind(
+      newId('evt'),
+      project.id,
+      JSON.stringify({ run_id: id, lab: labLabel(labNo) }),
+      actorUserId,
+      createdAt,
+    ),
+  ]);
+  return (await findRun(env, id)) as RunRow;
+}
 
 projectRunRoutes.get('/:slug/leaderboard', async (c) => {
   const principal = await authenticateOptional(c.req.raw, c.env);
@@ -197,7 +207,7 @@ runRoutes.get('/:runId', async (c) => {
  * 分三步落库是为了失败可重试：Thread 一建出来就先记下 id，重试时复用它。
  * external_ref 只是给人看的集成标记，Cybion 不拿它去重，所以重试绝不能再开一个。
  */
-async function startRunThread(
+export async function startRunThread(
   env: Env,
   origin: string,
   project: { id: string; slug: string; name: string },

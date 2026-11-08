@@ -53,7 +53,9 @@ proposed → dispatched → running → frozen | rejected | lost
 
 ## 开一轮实验会发生什么
 
-开 run 就是**发出**这一轮，不是先登记再手动绑 Thread。思路可以先由这个项目的 **master thread**（一条长期的 Cybion Thread）写出来——点「开新一轮实验」时它会自动开始诊断，写好的思路填进表单，你可以直接改。它收到的是一张**地图速览**（每个 lab 一行 + 最近几轮全文），细节由它拿只读令牌按需去取：
+开 run 就是**发出**这一轮，不是先登记再手动绑 Thread。项目页上有**启动研究 / 暂停研究**：启动之后就没人什么事了——出思路、开实验、等结论、再出思路，全自动；暂停只是不再开新实验，在飞的那一轮照常跑完。要自己写思路也可以用表单手开一轮。
+
+思路可以先由这个项目的 **master thread**（一条长期的 Cybion Thread）写出来——点「开新一轮实验」时它会自动开始诊断，写好的思路填进表单，你可以直接改。它收到的是一张**地图速览**（每个 lab 一行 + 最近几轮全文），细节由它拿只读令牌按需去取：
 
 
 
@@ -110,6 +112,7 @@ curl -sX PUT --data-binary @outputs/canonical.txt \
 | `POST` | `/api/v1/projects/{slug}/metrics/{key}/retire` | 退役一个指标 |
 | `GET` `POST` | `/api/v1/projects/{slug}/dataset` | 当前数据集 pin / 绑定新 pin |
 | `GET` `POST` | `/api/v1/projects/{slug}/idea` | 思路线程：请它出主意 / 取回这一轮的想法 |
+| `POST` | `/api/v1/projects/{slug}/loop` | 启动 / 暂停研究循环 |
 | `GET` | `/api/v1/firmament/datasets` | Firmament 数据集目录（token 透传） |
 | `GET` | `/api/v1/projects/{slug}/leaderboard` | 榜单（带指标定义与顺序） |
 | `POST` | `/api/v1/projects/{slug}/sota` | 晋升 / 降级 / 排除 |

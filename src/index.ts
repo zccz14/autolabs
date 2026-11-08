@@ -6,7 +6,10 @@ import projectRoutes from './routes/projects';
 import { projectSnapshotRoutes, snapshotRoutes } from './routes/snapshots';
 import { projectRunRoutes, runRoutes } from './routes/runs';
 import { firmamentRoutes, projectMetricRoutes } from './routes/metrics';
+import { driveProjectLoop } from './loop-runner';
+import type { ProjectRow } from './store';
 import { projectIdeaRoutes } from './routes/ideas';
+import { projectLoopRoutes } from './routes/loop';
 
 type Variables = { principal: Principal };
 
@@ -26,6 +29,7 @@ app.route('/api/v1/projects', projectSnapshotRoutes);
 app.route('/api/v1/projects', projectRunRoutes);
 app.route('/api/v1/projects', projectMetricRoutes);
 app.route('/api/v1/projects', projectIdeaRoutes);
+app.route('/api/v1/projects', projectLoopRoutes);
 app.route('/api/v1/firmament', firmamentRoutes);
 app.route('/api/v1/snapshots', snapshotRoutes);
 app.route('/api/v1/runs', runRoutes);
@@ -72,9 +76,19 @@ async function reconcile(env: Env): Promise<void> {
   }
 }
 
+/** 研究循环的心跳：每一拍都重新判断该做什么，所以重复执行是安全的。 */
+async function driveLoops(env: Env): Promise<void> {
+  const running = await env.DB.prepare(`SELECT * FROM projects WHERE loop_state = 'running' LIMIT 10`).all<ProjectRow>();
+  for (const project of running.results ?? []) {
+    if (project.loop_last_tick_at && project.loop_last_tick_at > Math.floor(Date.now() / 1000) - 20) continue;
+    await driveProjectLoop(env, project);
+  }
+}
+
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(reconcile(env));
+    ctx.waitUntil(driveLoops(env));
   },
 } satisfies ExportedHandler<Env>;
