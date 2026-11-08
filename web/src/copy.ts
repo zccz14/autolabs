@@ -71,6 +71,7 @@ export const COPY = {
   'label.gates': { zh: '门禁', en: 'Gates' },
   'label.metrics': { zh: '指标', en: 'Metrics' },
   'label.report': { zh: '结论报告', en: 'Report' },
+  'label.ideaAndReport': { zh: '思路与结论', en: 'Idea and report' },
   'label.state': { zh: '状态', en: 'State' },
   'label.none': { zh: '无', en: 'None' },
   'empty.projects': { zh: '还没有项目。建一个 <Domain>-Labs，比如 q-labs。', en: 'No projects yet. Create a <Domain>-Labs, e.g. q-labs.' },
