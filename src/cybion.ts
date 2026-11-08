@@ -14,7 +14,10 @@ import type { ThreadResponse } from './ideas';
  */
 
 /** 只在这里把传输层失败翻译成人能读的话；怎么处理由调用方决定。 */
-export class CybionError extends Error {}
+export class CybionError extends Error {
+  /** Cybion 的 HTTP 状态码；连不上的时候没有。调用方靠它分辨「这把 key 不认了」。 */
+  status?: number;
+}
 
 function baseUrl(env: Env): string {
   if (!env.CYBION_BASE_URL) throw new CybionError('没有配置 CYBION_BASE_URL，无法联系 Cybion');
@@ -54,7 +57,9 @@ async function call<T>(env: Env, options: CallOptions): Promise<T> {
   if (!response.ok) {
     const detail = parsed as { error?: string; message?: string } | null;
     const reason = detail?.message ?? detail?.error ?? text.slice(0, 200) ?? '';
-    throw new CybionError(`Cybion 返回 ${response.status}${reason ? `：${reason}` : ''}`);
+    const error = new CybionError(`Cybion 返回 ${response.status}${reason ? `：${reason}` : ''}`);
+    error.status = response.status;
+    throw error;
   }
   return parsed as T;
 }
