@@ -39,6 +39,8 @@ function viewProject(access: Access, extra: Record<string, unknown> = {}) {
     sota_run_id: project.sota_run_id,
     rules_snapshot_id: project.rules_snapshot_id,
     dataset_pin_id: project.dataset_pin_id,
+    idea_thread_id: project.idea_thread_id,
+    idea_thread_user_id: project.idea_thread_user_id,
     created_at: project.created_at,
     role,
     ...extra,

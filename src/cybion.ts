@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import type { ThreadResponse } from './ideas';
 
 /**
  * Cybion 的两套入口，正好对应两种身份：
@@ -117,6 +118,15 @@ export async function createThread(
     path: '/v1/threads',
     authorization: `Bearer ${apiKey}`,
     body: { title: input.title, external_ref: input.externalRef },
+  });
+}
+
+/** 读这条 Thread 对「最近一条输入」的回复；还没开始回就是 null。 */
+export async function readThreadResponse(env: Env, apiKey: string, threadId: string): Promise<ThreadResponse | null> {
+  return call<ThreadResponse | null>(env, {
+    method: 'GET',
+    path: `/v1/threads/${encodeURIComponent(threadId)}/response`,
+    authorization: `Bearer ${apiKey}`,
   });
 }
 
