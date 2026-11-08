@@ -370,3 +370,31 @@ export function useFirmamentDatasets(sdk: SdkLike | null, enabled: boolean) {
       api<{ enabled: boolean; datasets: FirmamentDatasetView[] }>(sdk as SdkLike, '/api/v1/firmament/datasets', { signal }),
   });
 }
+
+export interface CybionCredentialView {
+  source: 'user' | 'service';
+  label: string;
+  prefix: string | null;
+  created_at: number | null;
+}
+
+export function useCybionCredential(sdk: SdkLike | null) {
+  return useQuery({
+    queryKey: ['cybion-credential'],
+    enabled: Boolean(sdk),
+    queryFn: () => api<{ credential: CybionCredentialView | null }>(sdk as SdkLike, '/api/v1/cybion/credentials'),
+  });
+}
+
+/** 用当前登录的 JWT 换一把 Cybion API key：换完 AutoLabs 自己密封存下来。 */
+export function useExchangeCybionCredential(sdk: SdkLike | null) {
+  return useMutation({
+    mutationFn: () => api<{ credential: CybionCredentialView }>(sdk as SdkLike, '/api/v1/cybion/credentials', { method: 'POST' }),
+  });
+}
+
+export function useDropCybionCredential(sdk: SdkLike | null) {
+  return useMutation({
+    mutationFn: () => api<{ deleted: boolean }>(sdk as SdkLike, '/api/v1/cybion/credentials', { method: 'DELETE' }),
+  });
+}
