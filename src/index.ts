@@ -79,9 +79,14 @@ async function reconcile(env: Env): Promise<void> {
 /** 研究循环的心跳：每一拍都重新判断该做什么，所以重复执行是安全的。 */
 async function driveLoops(env: Env): Promise<void> {
   const running = await env.DB.prepare(`SELECT * FROM projects WHERE loop_state = 'running' LIMIT 10`).all<ProjectRow>();
+  console.log('loop.cron', { projects: (running.results ?? []).map((project) => `${project.slug}:${project.loop_last_tick_at}`) });
   for (const project of running.results ?? []) {
     if (project.loop_last_tick_at && project.loop_last_tick_at > Math.floor(Date.now() / 1000) - 20) continue;
-    await driveProjectLoop(env, project);
+    try {
+      await driveProjectLoop(env, project);
+    } catch (error) {
+      console.error('loop.failed', (error as Error).message);
+    }
   }
 }
 
