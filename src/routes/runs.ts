@@ -213,7 +213,7 @@ runRoutes.get('/:runId', async (c) => {
 export async function startRunThread(
   env: Env,
   origin: string,
-  project: { id: string; slug: string; name: string },
+  project: { id: string; slug: string; name: string; run_model?: string | null },
   run: RunRow,
   actorUserId: string,
   caller: Caller,
@@ -247,6 +247,7 @@ export async function startRunThread(
       const thread = await createThread(env, apiKey, {
         externalRef: run.external_ref,
         title: `${labLabel(run.lab_no)} · ${project.name}`,
+        model: project.run_model,
       });
       // 一建出来就先落库：重试复用它，绝不在 Cybion 里开出第二个 Thread。
       threadId = thread.id;

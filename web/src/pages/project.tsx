@@ -19,6 +19,7 @@ import {
   useLoopControl,
   useProject,
   useProjectIdea,
+  useSaveRunModel,
   useStartIdea,
   type SdkLike,
 } from '../api';
@@ -177,6 +178,11 @@ export function ProjectPage() {
       </header>
 
       <ErrorNote error={detail.error ?? createRun.error ?? freeze.error ?? loop.error} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">实验模型</span>
+        <RunModelSetting sdk={typed} slug={slug} current={project?.run_model ?? ''} onSaved={() => detail.refetch()} />
+      </div>
 
       {loopRun || project?.loop_error ? (
         <p className={`text-xs ${project?.loop_error ? 'text-destructive' : 'text-muted-foreground'}`}>
@@ -522,5 +528,48 @@ function Stat({ label, value, mono }: { label: string; value: string; mono?: boo
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className={mono ? 'font-mono text-sm' : 'text-sm'}>{value}</span>
     </div>
+  );
+}
+
+/** 项目级「跑实验用哪个模型」：空就是跟随这个人在 Cybion 里的默认值。 */
+function RunModelSetting({
+  sdk,
+  slug,
+  current,
+  onSaved,
+}: {
+  sdk: SdkLike | null;
+  slug: string;
+  current: string;
+  onSaved: () => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const save = useSaveRunModel(sdk, slug);
+  const shown = draft ?? current;
+  return (
+    <>
+      <Input
+        className="h-7 w-56 font-mono"
+        value={shown}
+        placeholder="跟随 Cybion 默认"
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={save.isPending || shown === current}
+        onClick={() =>
+          save.mutate(shown, {
+            onSuccess: () => {
+              setDraft(null);
+              onSaved();
+            },
+          })
+        }
+      >
+        保存
+      </Button>
+      <ErrorNote error={save.error} />
+    </>
   );
 }

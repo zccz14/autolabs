@@ -64,6 +64,8 @@ export interface ProjectSummary {
   owner_user_id: string;
   created_at: number;
   role: string;
+  /** 跑实验的 Thread 用哪个模型；空表示跟随 Cybion 默认。 */
+  run_model?: string | null;
   /** 研究循环：running 就一直推进，paused 就不开新实验。 */
   loop_state?: 'running' | 'paused';
   loop_run_id?: string | null;
@@ -415,6 +417,17 @@ export function useLoopControl(sdk: SdkLike | null, slug: string | undefined) {
       api<{ loop_state: 'running' | 'paused' }>(sdk as SdkLike, `/api/v1/projects/${slug}/loop`, {
         method: 'POST',
         body: JSON.stringify({ action }),
+      }),
+  });
+}
+
+/** 项目级设置：跑实验用哪个模型（空 = 跟随 Cybion 默认）。 */
+export function useSaveRunModel(sdk: SdkLike | null, slug: string | undefined) {
+  return useMutation({
+    mutationFn: (runModel: string) =>
+      api<{ run_model: string | null }>(sdk as SdkLike, `/api/v1/projects/${slug}/settings`, {
+        method: 'POST',
+        body: JSON.stringify({ run_model: runModel }),
       }),
   });
 }
