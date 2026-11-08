@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PlayIcon, SnowflakeIcon } from 'lucide-react';
 import { useAuthMini } from 'auth-mini-react-components';
@@ -8,6 +8,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Empty, ErrorNote, Field, Section, StatePill, when } from '../ui';
 import { useCopy } from '../copy';
 import { DatasetPanel } from './dataset-panel';
+import type { MetricPoint } from '../components/metric-chart';
 import { TokensPanel } from './tokens-panel';
 import { MetricsPanel } from './metrics-panel';
 import {
@@ -21,6 +22,9 @@ import {
 import { formatMetricValue } from '../metrics-format';
 
 type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots' | 'tokens';
+
+// 图表库不小，只有榜单页用得到：按需加载，别拖慢打开目录的那一下。
+const MetricChart = lazy(() => import('../components/metric-chart').then((module) => ({ default: module.MetricChart })));
 
 /** 目录的状态筛选：先给最常见的前三个，其余按 run 生命周期补齐。 */
 const STATE_FILTERS = ['all', 'frozen', 'rejected', 'proposed', 'dispatched', 'running', 'lost'] as const;
@@ -51,6 +55,8 @@ export function ProjectPage() {
   const [tab, setTab] = useState<Tab>('runs');
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [opening, setOpening] = useState(false);
+  // 趋势图默认画主指标；用户可以按指标切。
+  const [trendKey, setTrendKey] = useState<string | null>(null);
   const [idea, setIdea] = useState('');
   const [note, setNote] = useState('');
 
@@ -76,6 +82,21 @@ export function ProjectPage() {
     return primary?.direction === 'lower-better' ? a - b : b - a;
   });
   const sotaLab = runs.find((run) => run.id === project?.sota_run_id)?.lab ?? t('label.none');
+  const trendMetric = definitions.find((metric) => metric.key === trendKey) ?? primary ?? definitions[0] ?? null;
+  const trendPoints: MetricPoint[] = trendMetric
+    ? runs
+        .flatMap((run) => {
+          const value = run.metrics?.[trendMetric.key];
+          return typeof value === 'number' ? [{ lab: run.lab, lab_no: run.lab_no, value, state: run.state }] : [];
+        })
+        .sort((left, right) => left.lab_no - right.lab_no)
+    : [];
+  const directionLabel = (direction: string) =>
+    direction === 'lower-better'
+      ? t('label.directionLower')
+      : direction === 'higher-better'
+        ? t('label.directionHigher')
+        : t('label.directionNeutral');
 
   const submitRun = () => {
     createRun.mutate(
@@ -232,6 +253,41 @@ export function ProjectPage() {
             {visibleRuns.length === 0 ? <p className="mt-3 text-xs text-muted-foreground">{t('label.none')}</p> : null}
           </Section>
         )
+      ) : null}
+
+      {tab === 'leaderboard' ? (
+        <Section title={t('label.trend')} description={t('desc.trend')}>
+          {definitions.length === 0 ? (
+            <Empty>{t('label.none')}</Empty>
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {definitions.map((metric) => (
+                  <Button
+                    key={metric.key}
+                    size="sm"
+                    variant={metric.key === trendMetric?.key ? 'default' : 'outline'}
+                    onClick={() => setTrendKey(metric.key)}
+                  >
+                    {metric.label}
+                  </Button>
+                ))}
+              </div>
+              {trendMetric && trendPoints.length > 0 ? (
+                <>
+                  <Suspense fallback={<Empty>正在加载图表…</Empty>}>
+                    <MetricChart points={trendPoints} unit={trendMetric.unit} />
+                  </Suspense>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {trendMetric.label}｜{trendMetric.unit}｜{directionLabel(trendMetric.direction)}｜{trendPoints.length} 个实验报过这个数字
+                  </p>
+                </>
+              ) : (
+                <Empty>还没有实验报过这个指标的数字</Empty>
+              )}
+            </>
+          )}
+        </Section>
       ) : null}
 
       {tab === 'leaderboard' ? (
