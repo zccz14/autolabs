@@ -69,6 +69,8 @@ export function MetricChart({ points, unit, height = 220 }: { points: MetricPoin
           />
           <YAxis
             width={64}
+            // 纵轴贴着数据走，但一定把 0 包进来——不然零线要么看不见，要么上面留一大截空白。
+            domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]}
             tick={axisStyle}
             tickLine={false}
             axisLine={false}
