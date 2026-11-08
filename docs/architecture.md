@@ -13,7 +13,7 @@ AutoLabs 不做计算。真正的 `run_conceptual.py` / 回测 / 画图发生在
 | 实验文件 | R2（内容寻址） | `blobs/<ab>/<sha256>`，跨项目去重 |
 | 身份 | Auth Mini | 前端 `AuthMiniProvider`，后端验 EdDSA + JWKS |
 | 触达 | Linkit | 冻结、SOTA 变更、run lost 三件事才通知 |
-| 执行 | Cybion `/v1/threads`（API key） | 一个 run 一个 Thread；`external_ref` 是给人看的标记，去重由 AutoLabs 自己保证 |
+| 执行 | Cybion `/v1/threads`（API key）；执行体回传时带 Cybion 签的 Thread 令牌 | 一个 run 一个 Thread；`external_ref` 是给人看的标记，去重由 AutoLabs 自己保证 |
 | 对账 | Cron（`*/15 * * * *`） | 救援，不是主循环 |
 
 ## 轮询：为什么这么设计

@@ -31,9 +31,9 @@ export async function loadProject(
   const project = await findProjectBySlug(env, slug);
   if (!project) fail(404, 'not_found', `项目 ${slug} 不存在`);
 
-  if (principal?.kind === 'token') {
-    if (principal.projectId !== project.id) fail(403, 'forbidden', '凭据不属于该项目');
-    if (!tokenAllows(principal, capability)) fail(403, 'forbidden', `凭据缺少 ${capability} 能力`);
+  if (principal?.kind === 'token' || principal?.kind === 'thread') {
+    if (principal.projectId !== project.id) fail(403, 'forbidden', '身份不属于该项目');
+    if (!tokenAllows(principal, capability)) fail(403, 'forbidden', `身份缺少 ${capability} 能力`);
     return { project, role: principal.capabilities.includes('sota') ? 'maintainer' : 'runner', principal };
   }
 

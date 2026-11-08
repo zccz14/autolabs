@@ -19,7 +19,6 @@ import {
 } from '../store';
 import { matchMetrics, missingRequiredMetrics } from '../metrics';
 import { createThread, sendInput } from '../cybion';
-import { mintProjectToken } from '../tokens';
 import { callerOf, withCybionKey, type Caller } from '../credentials';
 import { buildRunBrief, withExclusion } from '../runs';
 import { viewRun } from './projects';
@@ -193,6 +192,10 @@ async function accessRun(env: Env, request: Request, runId: string, needed: 'rea
   const project = await findProjectById(env, (run as RunRow).project_id);
   if (!project) fail(404, 'not_found', 'run 所属项目不存在');
   const access = await loadProject(env, project.slug, principal, needed, needed === 'reader' ? 'read' : 'write');
+  // 一轮实验的执行体只能结算它自己那一轮：Thread 与 run 的绑定就是授权本身。
+  if (principal?.kind === 'thread' && principal.runId !== (run as RunRow).id) {
+    fail(403, 'forbidden', '这条 Thread 只能操作它自己那一轮实验');
+  }
   return { run: run as RunRow, access, principal };
 }
 
@@ -215,16 +218,6 @@ export async function startRunThread(
   actorUserId: string,
   caller: Caller,
 ): Promise<RunRow> {
-  // 执行体要凭一把令牌回传结论：每轮一把，只覆盖 read/write/verdict，30 天到期。
-  const minted = await mintProjectToken();
-  const createdAt = nowSeconds();
-  const expiresAt = createdAt + 30 * 86400;
-  await env.DB.prepare(
-    `INSERT INTO project_tokens (id, project_id, label, secret_sha256, capabilities, created_by, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-    .bind(minted.id, project.id, `verdict · ${labLabel(run.lab_no)} · ${run.id}`, minted.secretSha256, 'read,write,verdict', actorUserId, createdAt, expiresAt)
-    .run();
   const definitions = await currentMetrics(env, project.id);
   const brief = buildRunBrief({
     lab: labLabel(run.lab_no),
@@ -245,8 +238,6 @@ export async function startRunThread(
       required: Boolean(definition.required),
       definition_md: definition.definition_md,
     })),
-    verdictToken: minted.token,
-    tokenExpiresAt: expiresAt,
   });
   // Thread 必须开在这一轮创建者名下：用他的 Cybion key，AutoLabs 在后台保证这把
   // key 存在（第一次要用时才换，key 失效了当场重换），界面上没有这件事。

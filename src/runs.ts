@@ -34,8 +34,6 @@ export interface RunBriefInput {
   idea: string | null;
   note: string;
   metrics: { key: string; label: string; unit: string; direction: string; required: boolean; definition_md: string }[];
-  verdictToken: string;
-  tokenExpiresAt: number;
 }
 
 /**
@@ -80,7 +78,7 @@ ${input.idea?.trim() || input.note.trim() || '（这一轮没有写思路：按�
 - 单个文件：\`GET ${base}/api/v1/projects/${input.projectSlug}/blobs/<sha256>\`
 - 整包（快照不超过打包上限时）：\`GET ${base}/api/v1/snapshots/${input.snapshotId}/tar.gz\`
 
-请求都带上第 4 节那把令牌（它对文件有读权限）。快照是只读的，改动请落在你自己的机器上。
+请求都要带一张证明「你是这条 Thread」的令牌（它对文件有读权限）：调用 Cybion 的 \`create_thread_token\` 工具现签一张，60 秒内有效，放进 \`Authorization: Bearer\`。快照是只读的，改动请落在你自己的机器上。
 
 ## 3. 判定规则
 
@@ -95,7 +93,7 @@ ${metricLines}
 
 \`\`\`http
 POST ${base}/api/v1/runs/${input.runId}/verdict
-Authorization: Bearer ${input.verdictToken}
+Authorization: Bearer <create_thread_token 返回的 token>
 Content-Type: application/json
 \`\`\`
 
@@ -115,7 +113,7 @@ Content-Type: application/json
 - \`metrics\` 的 key 用第 3 节里的那几个。
 - \`report_md\` 是这一轮的结果：结论、证据、下一步。
 - \`output_files\` 可选；要带的话，先把文件 \`PUT ${base}/api/v1/projects/${input.projectSlug}/blobs/<sha256>\` 传上来，再用 sha256 引用。
-- 令牌只对这一个项目有效，${new Date(input.tokenExpiresAt * 1000).toISOString().slice(0, 10)} 到期。
+- 令牌只证明「你是这条 Thread」，60 秒后过期：发之前现签一张，遇到 401 就再签一张重发。
 
 报完之后这一轮就结算了：全过进榜单，缺门禁或被排除的留在研究地图里当历史。
 `;
