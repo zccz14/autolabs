@@ -131,12 +131,20 @@ pnpm dev                       # wrangler dev，http://127.0.0.1:8787
 
 ## 部署
 
+部署只在 GitHub Actions 里做：`main` 上的 `pr-check` 通过后，`deploy.yml` 接着跑 D1 迁移、`wrangler deploy`，再冒烟验证线上（首页 200，带 Cybion `iss` 的伪造令牌必须落到「Thread 令牌」那条验证分支）。
+
+- 仓库 secret：`CLOUDFLARE_API_TOKEN`（Workers Scripts:Edit、Workers Routes:Edit、D1:Edit；作用域 account `NTNL`，zone `ntnl.io`）和 `CLOUDFLARE_ACCOUNT_ID`。缺任何一个，部署 job 立即失败并写清缺什么——不再「跳过并报 success」。
+- 重跑一次上线：`gh workflow run deploy.yml -R zccz14/autolabs`，或在 Actions 里点 Run workflow，不用空提交。
+- 现有令牌到期日 2027-11-08；到期后部署会红，换一张新令牌再重跑即可。
+
+`.github/workflows/pr-check.yml` 在 PR 上跑类型检查、单测、构建和本地迁移。本机只用来调试：
+
 ```sh
-pnpm exec wrangler d1 migrations apply autolabs --remote
-pnpm deploy                    # 构建 + wrangler deploy，绑定 autolabs.ntnl.io
+pnpm exec wrangler d1 migrations apply autolabs --local
+pnpm dev
 ```
 
-`.github/workflows/pr-check.yml` 在 PR 上跑类型检查、单测、构建和本地迁移。`deploy.yml` 只在配置了 `CLOUDFLARE_API_TOKEN` 时自动部署，否则跳过（由维护者在本机部署）。
+不要用本机 wrangler 往生产部署：那会绕过上面的冒烟检查，并让「这次合并到底有没有上线」重新变得看不见。
 
 ## 状态
 
