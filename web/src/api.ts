@@ -101,6 +101,17 @@ export interface FirmamentDatasetView {
   updated_at: number;
 }
 
+/** 发出这一轮的结果：发不出去时 ok=false，run 仍停在 proposed。 */
+export interface DispatchOutcome {
+  ok: boolean;
+  error?: string;
+}
+
+export interface CreateRunResult {
+  run: RunView;
+  dispatch: DispatchOutcome;
+}
+
 export interface RunView {
   id: string;
   lab_no: number;
@@ -202,8 +213,9 @@ export function useCreateRun(sdk: SdkLike | null, slug: string) {
   return useMutation({
     // 思路是开 run 的必填项（ADR 0002）：由表单强制，API 仍保持可选，
     // 免得打断 scripts/smoke.sh 与既有的机器上报链路。
+    // 创建就是发出：服务端建 Thread、发首条输入，发不出去会带回 dispatch.error。
     mutationFn: (input: { note: string; idea_md: string }) =>
-      api<{ run: RunView }>(sdk as SdkLike, `/api/v1/projects/${slug}/runs`, {
+      api<CreateRunResult>(sdk as SdkLike, `/api/v1/projects/${slug}/runs`, {
         method: 'POST',
         body: JSON.stringify({ note: input.note, idea_md: input.idea_md }),
       }),
@@ -246,10 +258,11 @@ export function useRevokeToken(sdk: SdkLike | null, slug: string) {
 
 export function useDispatchRun(sdk: SdkLike | null) {
   return useMutation({
-    mutationFn: (input: { runId: string; threadId: string }) =>
-      api<{ run: RunView }>(sdk as SdkLike, `/api/v1/runs/${input.runId}/dispatch`, {
+    // 不带 threadId 就是「发出去」（已建过的 Thread 会复用）；带了就是换绑。
+    mutationFn: (input: { runId: string; threadId?: string }) =>
+      api<{ run: RunView; dispatch: DispatchOutcome }>(sdk as SdkLike, `/api/v1/runs/${input.runId}/dispatch`, {
         method: 'POST',
-        body: JSON.stringify({ cybion_thread_id: input.threadId }),
+        body: JSON.stringify(input.threadId ? { cybion_thread_id: input.threadId } : {}),
       }),
   });
 }

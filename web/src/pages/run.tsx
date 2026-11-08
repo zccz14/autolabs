@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useAuthMini } from 'auth-mini-react-components';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -39,7 +39,10 @@ export function RunPage() {
   const dispatch = useDispatchRun(typed);
   const verdict = useVerdict(typed);
   const promote = usePromoteSota(typed, '');
-  const [threadId, setThreadId] = useState('');
+  const location = useLocation();
+  // 开 run 时如果没发出去，错误跟着导航一起过来；刷新之后仍然可以点「发出」重试。
+  const arrivedError = (location.state as { dispatchError?: string } | null)?.dispatchError ?? null;
+  const [localError, setLocalError] = useState<string | null>(arrivedError);
   const [payload, setPayload] = useState(SAMPLE_VERDICT);
   const [reason, setReason] = useState('全量样本外通过门禁，风险调整优于当前 SOTA');
 
@@ -71,21 +74,31 @@ export function RunPage() {
         </div>
       </header>
 
-      <ErrorNote error={dispatch.error ?? verdict.error ?? promote.error} />
+      <ErrorNote error={localError ?? dispatch.error ?? verdict.error ?? promote.error} />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Section title="Cybion Thread" description="在 Cybion 里开一个 Thread，把 thr_… 贴进来；绑定之后这一轮才算发出。执行体在用户自己的机器上，这里只存 id。">
-          <p className="mb-2 font-mono text-xs text-muted-foreground">{run.cybion_thread_id ?? '—'}</p>
-          <div className="flex gap-2">
-            <Input value={threadId} onChange={(event) => setThreadId(event.target.value)} placeholder="thr_…" />
-            <Button
-              size="sm"
-              disabled={!threadId || dispatch.isPending}
-              onClick={() => dispatch.mutate({ runId: run.id, threadId }, { onSuccess: () => query.refetch() })}
-            >
-              {t('action.dispatch')}
-            </Button>
-          </div>
+        <Section
+          title="Cybion Thread"
+          description="开一轮实验时 AutoLabs 自己建 Thread、发第一条输入；这里只存 id。没发出去就留在 proposed，点「发出」重试，已建过的 Thread 会复用。"
+        >
+          <p className="mb-2 break-all font-mono text-xs text-muted-foreground">{run.cybion_thread_id ?? '—'}</p>
+          <Button
+            size="sm"
+            disabled={run.state !== 'proposed' || dispatch.isPending}
+            onClick={() =>
+              dispatch.mutate(
+                { runId: run.id },
+                {
+                  onSuccess: (result) => {
+                    setLocalError(result.dispatch.ok ? null : result.dispatch.error ?? '发出失败');
+                    query.refetch();
+                  },
+                },
+              )
+            }
+          >
+            {run.state === 'proposed' ? t('action.dispatch') : '已发出'}
+          </Button>
         </Section>
         <Section title="快照">
           <p className="font-mono text-xs">in {run.input_snapshot_id}</p>
