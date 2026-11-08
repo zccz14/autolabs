@@ -4,7 +4,7 @@ import { authenticate, authenticateOptional } from '../auth';
 import { fail } from '../http';
 import { loadProject } from '../guards';
 import { CybionError, createThread, readThreadResponse, sendInput } from '../cybion';
-import { cybionKeyFor } from '../credentials';
+import { callerOf, withCybionKey } from '../credentials';
 import { buildIdeaBrief, extractIdea } from '../ideas';
 import { currentMetrics, listRuns, recordEvent } from '../store';
 import { labLabel } from '../labs';
@@ -29,19 +29,7 @@ projectIdeaRoutes.post('/:slug/idea', async (c) => {
 
   try {
     const threadOwner = project.idea_thread_user_id ?? principal.userId;
-    const apiKey = await cybionKeyFor(c.env, threadOwner);
     let threadId = project.idea_thread_id;
-    if (!threadId) {
-      const thread = await createThread(c.env, apiKey, {
-        externalRef: `autolabs:${project.slug}:master`,
-        title: `思路 · ${project.name}`,
-      });
-      threadId = thread.id;
-      await c.env.DB.prepare(`UPDATE projects SET idea_thread_id = ?, idea_thread_user_id = ? WHERE id = ?`)
-        .bind(threadId, principal.userId, project.id)
-        .run();
-      await recordEvent(c.env, 'idea.thread_created', project.id, principal.userId, { thread_id: threadId });
-    }
 
     const [definitions, runs] = await Promise.all([currentMetrics(c.env, project.id), listRuns(c.env, project.id, 500)]);
     const sota = runs.find((run) => run.id === project.sota_run_id);
@@ -88,7 +76,21 @@ projectIdeaRoutes.post('/:slug/idea', async (c) => {
         })),
     });
 
-    const request = await sendInput(c.env, apiKey, threadId, brief);
+    const request = await withCybionKey(c.env, threadOwner, callerOf(c.req.raw, principal), async (apiKey) => {
+      // 开 Thread 与第一条输入用同一把 key：AutoLabs 后台保证这个人在 Cybion 上有一把。
+      if (!threadId) {
+        const thread = await createThread(c.env, apiKey, {
+          externalRef: `autolabs:${project.slug}:master`,
+          title: `思路 · ${project.name}`,
+        });
+        threadId = thread.id;
+        await c.env.DB.prepare(`UPDATE projects SET idea_thread_id = ?, idea_thread_user_id = ? WHERE id = ?`)
+          .bind(threadId, principal.userId, project.id)
+          .run();
+        await recordEvent(c.env, 'idea.thread_created', project.id, principal.userId, { thread_id: threadId });
+      }
+      return sendInput(c.env, apiKey, threadId, brief);
+    });
     await c.env.DB.prepare(`UPDATE projects SET idea_request_record_id = ?, idea_requested_at = ? WHERE id = ?`)
       .bind(request.record_idx, nowSeconds(), project.id)
       .run();
@@ -107,12 +109,13 @@ projectIdeaRoutes.get('/:slug/idea', async (c) => {
   const principal = await authenticateOptional(c.req.raw, c.env);
   const access = await loadProject(c.env, c.req.param('slug'), principal);
   const project = access.project;
-  if (!project.idea_thread_id) return c.json({ thread_id: null, status: 'none', fresh: false });
+  const threadId = project.idea_thread_id;
+  if (!threadId) return c.json({ thread_id: null, status: 'none', fresh: false });
 
   const viewer = principal?.kind === 'user' ? principal.userId : null;
   const owner = project.idea_thread_user_id ?? viewer;
   if (!owner) {
-    return c.json({ thread_id: project.idea_thread_id, status: 'unknown', message: '这条思路线程不属于当前身份，读不到它的回复' });
+    return c.json({ thread_id: threadId, status: 'unknown', message: '这条思路线程不属于当前身份，读不到它的回复' });
   }
   // 地图没变（请求晚于最新一轮实验）就别再问一遍：同一个问题不值得烧第二次。
   const newest = await c.env.DB.prepare(`SELECT MAX(created_at) AS created_at FROM runs WHERE project_id = ?`)
@@ -121,15 +124,19 @@ projectIdeaRoutes.get('/:slug/idea', async (c) => {
   const fresh = project.idea_requested_at !== null && project.idea_requested_at >= (newest?.created_at ?? 0);
 
   try {
-    const apiKey = await cybionKeyFor(c.env, owner);
-    const response = await readThreadResponse(c.env, apiKey, project.idea_thread_id);
+    const response = await withCybionKey(
+      c.env,
+      owner,
+      principal ? callerOf(c.req.raw, principal) : { userId: '', jwt: null },
+      async (apiKey) => readThreadResponse(c.env, apiKey, threadId),
+    );
     // 回复必须是对「最近一次请求」的：旧回复不能当成新思路，否则表单会填上上一轮的内容。
     const matched = response?.input_record_id != null && response.input_record_id === project.idea_request_record_id;
     // 只有这一轮真的说完了才算有结果：in_flight 时它可能连 assistant message 都还没写出来。
     const finished = matched && response?.status === 'completed';
     const idea = finished ? extractIdea(response) : null;
     return c.json({
-      thread_id: project.idea_thread_id,
+      thread_id: threadId,
       status: !matched ? 'pending' : !finished ? 'pending' : idea ? 'ready' : 'empty',
       idea_md: idea,
       requested_at: project.idea_requested_at,
@@ -137,7 +144,7 @@ projectIdeaRoutes.get('/:slug/idea', async (c) => {
     });
   } catch (error) {
     if (error instanceof CybionError) {
-      return c.json({ thread_id: project.idea_thread_id, status: 'error', message: error.message });
+      return c.json({ thread_id: threadId, status: 'error', message: error.message });
     }
     throw error;
   }

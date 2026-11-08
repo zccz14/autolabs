@@ -59,6 +59,11 @@ describe('Cybion 外部集成面', () => {
     stubFetch(new Response(JSON.stringify({ error: 'invalid API key' }), { status: 401 }));
     await expect(sendInput(env, 'k', 'thr_1', 'hi')).rejects.toThrow(/401：invalid API key/);
   });
+
+  it('错误上带着状态码：调用方要靠它认出「这把 key 不认了」', async () => {
+    stubFetch(new Response(JSON.stringify({ error: 'invalid API key' }), { status: 401 }));
+    await expect(sendInput(env, 'k', 'thr_1', 'hi')).rejects.toMatchObject({ status: 401 });
+  });
 });
 
 describe('用 JWT 换 Cybion 凭据', () => {

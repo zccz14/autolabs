@@ -20,7 +20,7 @@ import {
 import { matchMetrics, missingRequiredMetrics } from '../metrics';
 import { createThread, sendInput } from '../cybion';
 import { mintProjectToken } from '../tokens';
-import { cybionKeyFor } from '../credentials';
+import { callerOf, withCybionKey, type Caller } from '../credentials';
 import { buildRunBrief, withExclusion } from '../runs';
 import { viewRun } from './projects';
 import { blobKey } from './snapshots';
@@ -68,7 +68,14 @@ projectRunRoutes.post('/:slug/runs', async (c) => {
   const run = (await findRun(c.env, id)) as RunRow;
   // 开一轮实验＝真的把这一轮发出去：建 Thread、发首条输入、置 dispatched。
   // 发不出去就留在 proposed，把原文回给调用方——不假装发出去了。
-  const dispatched = await startRunThread(c.env, new URL(c.req.url).origin, access.project, run, principal.userId)
+  const dispatched = await startRunThread(
+    c.env,
+    new URL(c.req.url).origin,
+    access.project,
+    run,
+    principal.userId,
+    callerOf(c.req.raw, principal),
+  )
     .then((started) => ({ ok: true as const, run: started }))
     .catch(async (error: Error) => {
       await recordEvent(c.env, 'run.dispatch_failed', access.project.id, principal.userId, {
@@ -196,18 +203,8 @@ async function startRunThread(
   project: { id: string; slug: string; name: string },
   run: RunRow,
   actorUserId: string,
+  caller: Caller,
 ): Promise<RunRow> {
-  // 用这一轮创建者自己的 Cybion 凭据；他没换过就用 Worker 里的服务级 key。
-  const apiKey = await cybionKeyFor(env, run.created_by);
-  let threadId = run.cybion_thread_id;
-  if (!threadId) {
-    const thread = await createThread(env, apiKey, {
-      externalRef: run.external_ref,
-      title: `${labLabel(run.lab_no)} · ${project.name}`,
-    });
-    threadId = thread.id;
-    await env.DB.prepare(`UPDATE runs SET cybion_thread_id = ? WHERE id = ?`).bind(threadId, run.id).run();
-  }
   // 执行体要凭一把令牌回传结论：每轮一把，只覆盖 read/write/verdict，30 天到期。
   const minted = await mintProjectToken();
   const createdAt = nowSeconds();
@@ -241,7 +238,21 @@ async function startRunThread(
     verdictToken: minted.token,
     tokenExpiresAt: expiresAt,
   });
-  await sendInput(env, apiKey, threadId, brief);
+  // Thread 必须开在这一轮创建者名下：用他的 Cybion key，AutoLabs 在后台保证这把
+  // key 存在（第一次要用时才换，key 失效了当场重换），界面上没有这件事。
+  let threadId: string | null = run.cybion_thread_id;
+  await withCybionKey(env, run.created_by, caller, async (apiKey) => {
+    if (!threadId) {
+      const thread = await createThread(env, apiKey, {
+        externalRef: run.external_ref,
+        title: `${labLabel(run.lab_no)} · ${project.name}`,
+      });
+      // 一建出来就先落库：重试复用它，绝不在 Cybion 里开出第二个 Thread。
+      threadId = thread.id;
+      await env.DB.prepare(`UPDATE runs SET cybion_thread_id = ? WHERE id = ?`).bind(threadId, run.id).run();
+    }
+    await sendInput(env, apiKey, threadId, brief);
+  });
   await env.DB.batch([
     env.DB.prepare(`UPDATE runs SET state = 'dispatched' WHERE id = ? AND state = 'proposed'`).bind(run.id),
     env.DB.prepare(`INSERT INTO events (id, project_id, kind, payload, actor_user_id, created_at) VALUES (?, ?, 'run.dispatched', ?, ?, ?)`).bind(
@@ -289,7 +300,14 @@ runRoutes.post('/:runId/dispatch', async (c) => {
     return c.json({ run: viewRun((updated ?? run) as RunRow), dispatch: { ok: true } });
   }
   try {
-    const started = await startRunThread(c.env, new URL(c.req.url).origin, access.project, run, principal.userId);
+    const started = await startRunThread(
+      c.env,
+      new URL(c.req.url).origin,
+      access.project,
+      run,
+      principal.userId,
+      callerOf(c.req.raw, principal),
+    );
     return c.json({ run: viewRun(started), dispatch: { ok: true } });
   } catch (error) {
     await recordEvent(c.env, 'run.dispatch_failed', access.project.id, principal.userId, {

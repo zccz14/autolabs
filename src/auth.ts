@@ -31,7 +31,8 @@ function keySet(issuer: string): Jwks {
   return cached;
 }
 
-function bearer(request: Request): string | null {
+/** Authorization: Bearer <token> 里的那一段。 */
+export function bearerOf(request: Request): string | null {
   const header = request.headers.get('authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
   return match ? match[1].trim() : null;
@@ -70,7 +71,7 @@ async function authenticateToken(raw: string, env: Env): Promise<Principal> {
 
 /** 必须登录：Auth Mini access token（aud = 本站）或项目凭据。 */
 export async function authenticate(request: Request, env: Env): Promise<Principal> {
-  const raw = bearer(request);
+  const raw = bearerOf(request);
   if (!raw) fail(401, 'unauthorized', '缺少 Authorization: Bearer');
   if (env.DEV_USER_ID && raw === 'dev') return { kind: 'user', userId: env.DEV_USER_ID, capabilities: ['*'] };
   if (raw.startsWith('alb_')) return authenticateToken(raw, env);
@@ -89,7 +90,7 @@ export async function authenticate(request: Request, env: Env): Promise<Principa
 
 /** 可匿名：公开只读项目允许无身份访问。 */
 export async function authenticateOptional(request: Request, env: Env): Promise<Principal | null> {
-  if (!bearer(request)) return null;
+  if (!bearerOf(request)) return null;
   try {
     return await authenticate(request, env);
   } catch {
