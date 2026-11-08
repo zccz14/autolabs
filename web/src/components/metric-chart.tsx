@@ -20,6 +20,27 @@ export interface MetricPoint {
 
 const axisStyle = { fill: 'var(--muted-foreground)', fontSize: 11 } as const;
 
+/**
+ * 刻度按 1/2/5 取整，别把 101.61% 这种数据值当刻度——刻度是尺子，不是数字。
+ * 纵轴永远把 0 包进来：负值指标（回撤、负夏普）没有零线就没有参照。
+ */
+function niceScale(min: number, max: number, targetTicks = 5) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return { min, max, step: 1 };
+  const step = (() => {
+    const raw = (max - min) / (targetTicks - 1);
+    const magnitude = 10 ** Math.floor(Math.log10(raw));
+    const normalized = raw / magnitude;
+    return (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10) * magnitude;
+  })();
+  return { min: Math.floor(min / step) * step, max: Math.ceil(max / step) * step, step };
+}
+
+function ticksBetween(min: number, max: number, step: number, from = min) {
+  const ticks: number[] = [];
+  for (let value = from; value <= max + step / 2; value += step) ticks.push(Number(value.toFixed(10)));
+  return ticks;
+}
+
 function Dot({ cx, cy, payload }: { cx?: number; cy?: number; payload?: MetricPoint }) {
   if (cx === undefined || cy === undefined || !payload) return null;
   const frozen = payload.state === 'frozen';
@@ -52,6 +73,12 @@ function ChartTooltip({ active, payload, unit }: { active?: boolean; payload?: {
  * 冻结的 run 实心、其它空心，0 画一条虚线——负数指标（回撤、负夏普）一眼能看出来。
  */
 export function MetricChart({ points, unit, height = 220 }: { points: MetricPoint[]; unit: string; height?: number }) {
+  const values = points.map((point) => point.value);
+  const y = niceScale(Math.min(0, ...values), Math.max(0, ...values));
+  const lastLab = Math.max(1, ...points.map((point) => point.lab_no));
+  const x = niceScale(1, lastLab);
+  const xTicks = ticksBetween(x.min, x.max, x.step, 1).filter((tick) => tick <= lastLab);
+
   return (
     <div style={{ width: '100%', height }}>
       <ResponsiveContainer>
@@ -60,7 +87,8 @@ export function MetricChart({ points, unit, height = 220 }: { points: MetricPoin
           <XAxis
             dataKey="lab_no"
             type="number"
-            domain={[1, 'dataMax']}
+            domain={[1, Math.max(1, lastLab)]}
+            ticks={xTicks}
             allowDecimals={false}
             tick={axisStyle}
             tickLine={false}
@@ -70,7 +98,8 @@ export function MetricChart({ points, unit, height = 220 }: { points: MetricPoin
           <YAxis
             width={64}
             // 纵轴贴着数据走，但一定把 0 包进来——不然零线要么看不见，要么上面留一大截空白。
-            domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]}
+            domain={[y.min, y.max]}
+            ticks={ticksBetween(y.min, y.max, y.step)}
             tick={axisStyle}
             tickLine={false}
             axisLine={false}
