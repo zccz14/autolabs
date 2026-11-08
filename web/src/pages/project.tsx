@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PlayIcon, SnowflakeIcon } from 'lucide-react';
 import { useAuthMini } from 'auth-mini-react-components';
 import { Button } from '../components/ui/button';
@@ -41,6 +41,7 @@ function excerpt(md: string | null, fallback: string, limit = 200): string {
 export function ProjectPage() {
   const t = useCopy();
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
   const { sdk } = useAuthMini();
   const typed = sdk as unknown as SdkLike | null;
   const detail = useProject(typed, slug);
@@ -80,11 +81,13 @@ export function ProjectPage() {
     createRun.mutate(
       { note, idea_md: idea.trim() },
       {
-        onSuccess: () => {
+        // 创建只是登记：直接落到这一轮的详情页，下一步（绑定 Cybion Thread）就在那里。
+        onSuccess: (created) => {
           setOpening(false);
           setIdea('');
           setNote('');
           detail.refetch();
+          navigate(`/runs/${created.run.id}`);
         },
       },
     );

@@ -74,7 +74,7 @@ export function RunPage() {
       <ErrorNote error={dispatch.error ?? verdict.error ?? promote.error} />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Section title="Cybion Thread" description="执行体在用户自己的机器上，这里只存 id。">
+        <Section title="Cybion Thread" description="在 Cybion 里开一个 Thread，把 thr_… 贴进来；绑定之后这一轮才算发出。执行体在用户自己的机器上，这里只存 id。">
           <p className="mb-2 font-mono text-xs text-muted-foreground">{run.cybion_thread_id ?? '—'}</p>
           <div className="flex gap-2">
             <Input value={threadId} onChange={(event) => setThreadId(event.target.value)} placeholder="thr_…" />

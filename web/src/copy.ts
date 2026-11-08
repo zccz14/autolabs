@@ -40,8 +40,8 @@ export const COPY = {
   'placeholder.note': { zh: '可选的补充说明', en: 'Optional note' },
   'hint.ideaRequired': { zh: '没有思路，这一行就只剩一个数字。', en: 'Without the idea, the row is just a number.' },
   'desc.newRun': {
-    zh: '先写下思路，编号与输入快照由平台分配。',
-    en: 'Write the idea first; the platform allocates the lab number and the input snapshot.',
+    zh: '这里只登记一行：编号与输入快照由平台分配，思路随这一行留下。计算不在这里发生——创建后打开这一轮，绑定 Cybion Thread 才算发出。',
+    en: 'This only records the row: the platform allocates the lab number and pins the input snapshot, and the idea stays with it. Computation does not happen here — open the run after creating it and bind a Cybion thread to actually send it out.',
   },
   'label.result': { zh: '结果', en: 'Result' },
   'label.all': { zh: '全部', en: 'All' },
