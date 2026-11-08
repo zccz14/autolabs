@@ -85,3 +85,43 @@ pre.block { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; l
 .pill-rejected { color: var(--muted-foreground); border-color: var(--border); background: var(--muted); }
 .pill-live { color: var(--foreground); border-color: var(--border); border-style: dashed; background: transparent; }
 .pill-proposed { color: var(--muted-foreground); }
+
+/*
+ * 思路与结论的 Markdown 排版：标题要比正文重、代码块要能换行、
+ * 表格要能横向滚动。配色只用主题变量，深色模式下自动跟随。
+ */
+.md { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4 { margin: 14px 0 6px; font-weight: 600; line-height: 1.35; }
+.md h1 { font-size: 15px; }
+.md h2 { font-size: 14px; }
+.md h3, .md h4 { font-size: 13px; }
+.md p, .md ul, .md ol, .md table, .md blockquote, .md pre { margin: 8px 0; }
+.md ul, .md ol { padding-left: 1.25rem; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li { margin: 2px 0; }
+.md code { padding: 1px 4px; border-radius: 4px; background: var(--muted); font-size: 12px; }
+.md pre { padding: 10px 12px; border-radius: 8px; background: var(--muted); overflow-x: auto; }
+.md pre code { padding: 0; background: transparent; }
+.md blockquote { padding-left: 10px; border-left: 2px solid var(--border); color: var(--muted-foreground); }
+.md a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.md table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.md th, .md td { padding: 5px 8px; border: 1px solid var(--border); text-align: left; }
+.md hr { margin: 14px 0; border: 0; border-top: 1px solid var(--border); }
+
+/*
+ * AutoLabs 的导航只有两项，图标本身说不清「项目」还是「关于」。
+ * 宽屏下不把侧栏收成图标轨道：标签始终在，收起按钮也一并藏掉
+ * （⌘B 仍会切换，但视觉上保持展开）。窄屏继续走 @zccz14/ux 的抽屉。
+ */
+@media (min-width: 768px) {
+  .ux-app-header__trigger { display: none; }
+  .ux-app-layout[data-state="collapsed"] .ux-sidebar { width: 16rem; }
+  .ux-app-layout[data-state="collapsed"] .ux-sidebar__header { justify-content: flex-start; padding: 0 0.75rem; }
+  .ux-app-layout[data-state="collapsed"] .ux-sidebar__title { display: block; }
+  .ux-app-layout[data-state="collapsed"] .ux-nav-group__label { display: flex; }
+  .ux-app-layout[data-state="collapsed"] .ux-nav-item { justify-content: flex-start; gap: 0.5rem; width: 100%; padding: 0 0.5rem; }
+  .ux-app-layout[data-state="collapsed"] .ux-nav-item__text { width: auto; opacity: 1; }
+}

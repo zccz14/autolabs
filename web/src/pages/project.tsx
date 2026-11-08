@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { KeyRoundIcon, PlayIcon, SnowflakeIcon } from 'lucide-react';
+import { PlayIcon, SnowflakeIcon } from 'lucide-react';
 import { useAuthMini } from 'auth-mini-react-components';
 import { Button } from '../components/ui/button';
-import { Empty, ErrorNote, Section, StatePill, when } from '../ui';
+import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
+import { Empty, ErrorNote, Field, Section, StatePill, when } from '../ui';
 import { useCopy } from '../copy';
 import { DatasetPanel } from './dataset-panel';
 import { TokensPanel } from './tokens-panel';
@@ -24,12 +26,14 @@ type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots' | 'token
 const STATE_FILTERS = ['all', 'frozen', 'rejected', 'proposed', 'dispatched', 'running', 'lost'] as const;
 type StateFilter = (typeof STATE_FILTERS)[number];
 
-/** 目录的一行只放摘要：完整的思路与结果在 run 详情里。 */
-function excerpt(md: string | null, fallback: string, limit = 72): string {
+/** 目录的一行只放摘要：完整的思路与结果在 run 详情里，这里靠 CSS 截到两行。 */
+function excerpt(md: string | null, fallback: string): string {
   if (!md) return fallback;
-  const text = md.replace(/[#*`>\-]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!text) return fallback;
-  return text.length > limit ? `${text.slice(0, limit)}…` : text;
+  const text = md
+    .replace(/[#*`>|~_-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text || fallback;
 }
 
 export function ProjectPage() {
@@ -43,6 +47,9 @@ export function ProjectPage() {
   const metricDefs = useMetrics(typed, slug);
   const [tab, setTab] = useState<Tab>('runs');
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
+  const [opening, setOpening] = useState(false);
+  const [idea, setIdea] = useState('');
+  const [note, setNote] = useState('');
 
   if (!slug) return null;
   const project = detail.data?.project;
@@ -67,6 +74,20 @@ export function ProjectPage() {
   });
   const sotaLab = runs.find((run) => run.id === project?.sota_run_id)?.lab ?? t('label.none');
 
+  const submitRun = () => {
+    createRun.mutate(
+      { note, idea_md: idea.trim() },
+      {
+        onSuccess: () => {
+          setOpening(false);
+          setIdea('');
+          setNote('');
+          detail.refetch();
+        },
+      },
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -79,11 +100,7 @@ export function ProjectPage() {
           <Button variant="outline" size="sm" onClick={() => detail.refetch()}>
             {t('action.refresh')}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setTab('tokens')}>
-            <KeyRoundIcon />
-            {t('label.tokens')}
-          </Button>
-          <Button size="sm" disabled={createRun.isPending} onClick={() => createRun.mutate('', { onSuccess: () => detail.refetch() })}>
+          <Button size="sm" variant={opening ? 'outline' : 'default'} onClick={() => setOpening((value) => !value)}>
             <PlayIcon />
             {t('action.newRun')}
           </Button>
@@ -91,6 +108,33 @@ export function ProjectPage() {
       </header>
 
       <ErrorNote error={detail.error ?? createRun.error ?? freeze.error} />
+
+      {opening ? (
+        <Section title={t('action.newRun')} description={t('desc.newRun')}>
+          <div className="flex flex-col gap-3">
+            <Field label={t('label.ideaRequired')}>
+              <Textarea
+                className="min-h-24"
+                value={idea}
+                placeholder={t('placeholder.idea')}
+                onChange={(event) => setIdea(event.target.value)}
+              />
+            </Field>
+            <Field label={t('label.note')}>
+              <Input value={note} placeholder={t('placeholder.note')} onChange={(event) => setNote(event.target.value)} />
+            </Field>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" disabled={!idea.trim() || createRun.isPending} onClick={submitRun}>
+                {t('action.submit')}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setOpening(false)}>
+                {t('action.cancel')}
+              </Button>
+              <span className="text-xs text-muted-foreground">{t('hint.ideaRequired')}</span>
+            </div>
+          </div>
+        </Section>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Stat label={t('label.labs')} value={String(project?.lab_seq ?? 0)} />
@@ -124,42 +168,60 @@ export function ProjectPage() {
                 </Button>
               ))}
             </div>
-            <table className="plain">
-              <thead>
-                <tr>
-                  <th>lab</th>
-                  <th>{t('label.state')}</th>
-                  <th>{t('label.idea')}</th>
-                  <th>{t('label.result')}</th>
-                  <th>{primary ? primary.label : t('label.metrics')}</th>
-                  <th>{t('label.gates')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRuns.map((run) => (
-                  <tr key={run.id}>
-                    <td className="font-mono">
-                      <Link to={`/runs/${run.id}`} className="text-primary underline-offset-4 hover:underline">
-                        {run.lab}
-                      </Link>
-                    </td>
-                    <td>
-                      <StatePill state={run.state} />
-                    </td>
-                    <td className="max-w-[18rem] text-xs text-muted-foreground">{excerpt(run.idea_md, t('label.ideaEmpty'))}</td>
-                    <td className="max-w-[18rem] text-xs text-muted-foreground">{excerpt(run.report_md, t('label.none'))}</td>
-                    <td className="text-xs">
-                      {primary && typeof run.metrics?.[primary.key] === 'number'
-                        ? formatMetricValue(run.metrics[primary.key] as number, primary.unit)
-                        : '—'}
-                    </td>
-                    <td>
-                      {run.gates.length === 0 ? '—' : `${run.gates.filter((gate) => gate.pass).length}/${run.gates.length}`}
-                    </td>
+            {/* 目录是六列并排的表格：语句列按比例分剩下的宽度，其余列固定，
+                整张表停在 72rem 以内——宽屏下不该把字拉成一条条长河。 */}
+            <div className="overflow-x-auto">
+              <table className="plain w-full min-w-[44rem] max-w-[72rem] table-fixed">
+                <colgroup>
+                  <col style={{ width: '4.5rem' }} />
+                  <col style={{ width: '6.5rem' }} />
+                  <col />
+                  <col />
+                  <col style={{ width: '7rem' }} />
+                  <col style={{ width: '4rem' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>lab</th>
+                    <th>{t('label.state')}</th>
+                    <th>{t('label.idea')}</th>
+                    <th>{t('label.result')}</th>
+                    <th className="truncate" title={primary ? primary.label : t('label.metrics')}>
+                      {primary ? primary.label : t('label.metrics')}
+                    </th>
+                    <th>{t('label.gates')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {visibleRuns.map((run) => (
+                    <tr key={run.id}>
+                      <td className="font-mono">
+                        <Link to={`/runs/${run.id}`} className="text-primary underline-offset-4 hover:underline">
+                          {run.lab}
+                        </Link>
+                      </td>
+                      <td>
+                        <StatePill state={run.state} />
+                      </td>
+                      <td className="text-xs text-muted-foreground">
+                        <p className="line-clamp-2 break-words">{excerpt(run.idea_md, t('label.ideaEmpty'))}</p>
+                      </td>
+                      <td className="text-xs text-muted-foreground">
+                        <p className="line-clamp-2 break-words">{excerpt(run.report_md, t('label.none'))}</p>
+                      </td>
+                      <td className="font-mono text-xs">
+                        {primary && typeof run.metrics?.[primary.key] === 'number'
+                          ? formatMetricValue(run.metrics[primary.key] as number, primary.unit)
+                          : '—'}
+                      </td>
+                      <td className="text-xs">
+                        {run.gates.length === 0 ? '—' : `${run.gates.filter((gate) => gate.pass).length}/${run.gates.length}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {visibleRuns.length === 0 ? <p className="mt-3 text-xs text-muted-foreground">{t('label.none')}</p> : null}
           </Section>
         )
@@ -275,7 +337,7 @@ export function ProjectPage() {
             <thead>
               <tr>
                 <th>action</th>
-                <th>run</th>
+                <th>lab</th>
                 <th>reason</th>
                 <th>at</th>
               </tr>
@@ -284,7 +346,15 @@ export function ProjectPage() {
               {detail.data.sota_events.map((event) => (
                 <tr key={event.id}>
                   <td>{event.action}</td>
-                  <td className="font-mono text-xs">{event.run_id}</td>
+                  <td className="font-mono text-xs">
+                    {event.lab ? (
+                      <Link to={`/runs/${event.run_id}`} className="text-primary underline-offset-4 hover:underline">
+                        {event.lab}
+                      </Link>
+                    ) : (
+                      event.run_id
+                    )}
+                  </td>
                   <td>{event.reason}</td>
                   <td className="text-xs text-muted-foreground">{when(event.created_at)}</td>
                 </tr>

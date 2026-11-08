@@ -28,9 +28,18 @@ export function App() {
   if (!isAuthenticated) {
     return (
       <main className="flex min-h-svh items-center justify-center p-6 text-sm text-muted-foreground">
-        <div className="flex flex-col items-center gap-2 text-center">
+        <div className="flex max-w-md flex-col items-center gap-3 text-center">
           <span>{t('hint.login')}</span>
-          <span className="max-w-sm text-xs">{t('hint.audience')}</span>
+          <span className="text-xs">{t('hint.loginRemote')}</span>
+          <a
+            className="text-xs text-primary underline underline-offset-4"
+            href="https://auth.ntnl.io"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('action.openLogin')}
+          </a>
+          <span className="text-xs">{t('hint.audience')}</span>
         </div>
       </main>
     );

@@ -140,7 +140,15 @@ export interface ProjectDetail {
   };
   runs: RunView[];
   snapshots: SnapshotView[];
-  sota_events: { id: string; run_id: string; action: string; reason: string; actor_user_id: string; created_at: number }[];
+  sota_events: {
+    id: string;
+    run_id: string;
+    lab: string | null;
+    action: string;
+    reason: string;
+    actor_user_id: string;
+    created_at: number;
+  }[];
 }
 
 export function useProjects(sdk: SdkLike | null) {
@@ -192,10 +200,12 @@ export function useCreateProject(sdk: SdkLike | null) {
 
 export function useCreateRun(sdk: SdkLike | null, slug: string) {
   return useMutation({
-    mutationFn: (note: string) =>
+    // 思路是开 run 的必填项（ADR 0002）：由表单强制，API 仍保持可选，
+    // 免得打断 scripts/smoke.sh 与既有的机器上报链路。
+    mutationFn: (input: { note: string; idea_md: string }) =>
       api<{ run: RunView }>(sdk as SdkLike, `/api/v1/projects/${slug}/runs`, {
         method: 'POST',
-        body: JSON.stringify({ note }),
+        body: JSON.stringify({ note: input.note, idea_md: input.idea_md }),
       }),
   });
 }
