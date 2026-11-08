@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PlayIcon, SnowflakeIcon } from 'lucide-react';
 import { useAuthMini } from 'auth-mini-react-components';
@@ -17,6 +17,8 @@ import {
   useFreezeSnapshot,
   useMetrics,
   useProject,
+  useProjectIdea,
+  useStartIdea,
   type SdkLike,
 } from '../api';
 import { formatMetricValue } from '../metrics-format';
@@ -55,10 +57,18 @@ export function ProjectPage() {
   const [tab, setTab] = useState<Tab>('runs');
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [opening, setOpening] = useState(false);
+  const startIdea = useStartIdea(typed, slug);
+  const ideaQuery = useProjectIdea(typed, slug, opening);
   // 趋势图默认画主指标；用户可以按指标切。
   const [trendKey, setTrendKey] = useState<string | null>(null);
   const [idea, setIdea] = useState('');
   const [note, setNote] = useState('');
+  const suggestedIdea = ideaQuery.data?.status === 'ready' ? (ideaQuery.data.idea_md ?? null) : null;
+
+  // 回复到了就填进表单；人已经动手写了的，不覆盖。
+  useEffect(() => {
+    if (suggestedIdea && !idea.trim()) setIdea(suggestedIdea);
+  }, [suggestedIdea, idea]);
 
   if (!slug) return null;
   const project = detail.data?.project;
@@ -98,6 +108,17 @@ export function ProjectPage() {
         ? t('label.directionHigher')
         : t('label.directionNeutral');
 
+  // 开表单就是「请它先诊断一遍」：只有思路还是空的时候才发，免得每次开合都烧一轮。
+  const toggleOpening = () => {
+    const next = !opening;
+    setOpening(next);
+    if (next && !idea.trim() && !startIdea.isPending) {
+      startIdea.mutate(undefined, { onSuccess: () => ideaQuery.refetch() });
+    }
+  };
+
+  const suggested = suggestedIdea;
+
   const submitRun = () => {
     createRun.mutate(
       { note, idea_md: idea.trim() },
@@ -128,7 +149,7 @@ export function ProjectPage() {
           <Button variant="outline" size="sm" onClick={() => detail.refetch()}>
             {t('action.refresh')}
           </Button>
-          <Button size="sm" variant={opening ? 'outline' : 'default'} onClick={() => setOpening((value) => !value)}>
+          <Button size="sm" variant={opening ? 'outline' : 'default'} onClick={toggleOpening}>
             <PlayIcon />
             {t('action.newRun')}
           </Button>
@@ -140,6 +161,34 @@ export function ProjectPage() {
       {opening ? (
         <Section title={t('action.newRun')} description={t('desc.newRun')}>
           <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground">
+              {ideaQuery.data?.status === 'pending' || startIdea.isPending ? (
+                <>master thread 正在读这张研究地图、诊断下一步该往哪走…</>
+              ) : suggested ? (
+                <>思路是 master thread 写的，可以直接改。</>
+              ) : ideaQuery.data?.status === 'error' ? (
+                <span className="text-destructive">{ideaQuery.data.message}</span>
+              ) : (
+                <>想自己写就直接写；空着的话，master thread 会替你想。</>
+              )}
+              {(() => {
+                const threadId = ideaQuery.data?.thread_id ?? startIdea.data?.thread_id;
+                return threadId ? (
+                  <>
+                    {' '}
+                    <a
+                      className="text-primary underline-offset-4 hover:underline"
+                      href={`https://cybion.ntnl.io/#/threads/${threadId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      在 Cybion 里看这条线程
+                    </a>
+                    （随时可以进去干预）
+                  </>
+                ) : null;
+              })()}
+            </p>
             <Field label={t('label.ideaRequired')}>
               <Textarea
                 className="min-h-24"

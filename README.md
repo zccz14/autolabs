@@ -53,7 +53,9 @@ proposed → dispatched → running → frozen | rejected | lost
 
 ## 开一轮实验会发生什么
 
-开 run 就是**发出**这一轮，不是先登记再手动绑 Thread：
+开 run 就是**发出**这一轮，不是先登记再手动绑 Thread。思路可以先由这个项目的 **master thread**（一条长期的 Cybion Thread）读完整个研究地图后写出来——点「开新一轮实验」时它会自动开始诊断，写好的思路填进表单，你可以直接改：
+
+
 
 1. 平台分配 `lab-000N` 与 `external_ref = autolabs:<slug>:<lab-000N>`，钉住输入快照。
 2. 平台用**开 run 那个人自己的** Cybion API key 在这一轮的 owner 的 Cybion 里开一个 Thread，标题是 `lab-000N · <项目名>`。这把 key 是他在工作台点「用当前登录换一把」换来的：那一刻用登录拿到的、带 `cybion.ntnl.io` audience 的 JWT 调 `POST /api/api-keys`，换到不会过期的 key 后密封存进库（`cybion_credentials`，`CREDENTIALS_KEY` 加密）。没换过的人回退到 Worker 里的服务级 `CYBION_API_KEY`。
@@ -107,6 +109,7 @@ curl -sX PUT --data-binary @outputs/canonical.txt \
 | `GET` `POST` | `/api/v1/projects/{slug}/metrics` | 指标契约（每次写入 = 新版本） |
 | `POST` | `/api/v1/projects/{slug}/metrics/{key}/retire` | 退役一个指标 |
 | `GET` `POST` | `/api/v1/projects/{slug}/dataset` | 当前数据集 pin / 绑定新 pin |
+| `GET` `POST` | `/api/v1/projects/{slug}/idea` | 思路线程：请它出主意 / 取回这一轮的想法 |
 | `GET` `POST` `DELETE` | `/api/v1/cybion/credentials` | 我的 Cybion 凭据：状态 / 用当前登录换一把 / 吊销 |
 | `GET` | `/api/v1/firmament/datasets` | Firmament 数据集目录（token 透传） |
 | `GET` | `/api/v1/projects/{slug}/leaderboard` | 榜单（带指标定义与顺序） |

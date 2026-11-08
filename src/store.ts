@@ -15,6 +15,13 @@ export interface ProjectRow {
   rules_snapshot_id: string | null;
   dataset_pin_id: string | null;
   created_at: number;
+  /** 思路线程（master thread）：读整张研究地图、产出下一轮实验的思路。 */
+  idea_thread_id: string | null;
+  /** 那条 Thread 属于谁——只有他的 Cybion 凭据读得到它的回复。 */
+  idea_thread_user_id: string | null;
+  /** 最近一次请它出主意的那条输入，用来判断回复是不是新的。 */
+  idea_request_record_id: number | null;
+  idea_requested_at: number | null;
 }
 
 export interface SnapshotRow {

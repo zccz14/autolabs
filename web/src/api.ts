@@ -398,3 +398,31 @@ export function useDropCybionCredential(sdk: SdkLike | null) {
     mutationFn: () => api<{ deleted: boolean }>(sdk as SdkLike, '/api/v1/cybion/credentials', { method: 'DELETE' }),
   });
 }
+
+/** 项目绑定的那条「思路线程」：它读整张研究地图，产出下一轮的思路。 */
+export interface ProjectIdea {
+  thread_id: string | null;
+  status: 'none' | 'pending' | 'ready' | 'empty' | 'error' | 'unknown';
+  idea_md?: string | null;
+  requested_at?: number | null;
+  message?: string;
+}
+
+export function useProjectIdea(sdk: SdkLike | null, slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['idea', slug],
+    enabled: Boolean(sdk && slug && enabled),
+    queryFn: () => api<ProjectIdea>(sdk as SdkLike, `/api/v1/projects/${slug}/idea`),
+    // 一轮诊断要好几分钟：pending 时每 4 秒问一次，有结论就停。
+    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 4000 : false),
+  });
+}
+
+export function useStartIdea(sdk: SdkLike | null, slug: string | undefined) {
+  return useMutation({
+    mutationFn: () =>
+      api<{ thread_id: string; status: string; record_idx: number }>(sdk as SdkLike, `/api/v1/projects/${slug}/idea`, {
+        method: 'POST',
+      }),
+  });
+}
