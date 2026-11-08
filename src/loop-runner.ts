@@ -21,8 +21,12 @@ export async function driveProjectLoop(env: Env, project: ProjectRow): Promise<v
   // 后台没有登录 JWT：用这个人存过的凭据，没有就回退服务级 key。
   const caller: Caller = { userId: actor, jwt: null };
 
+  // 「在飞」= 已经发出去、正在跑；proposed 只有在已经建了 Thread（发到一半）时才算。
+  // 光登记没发出去的旧 run 不该把整条研究线卡死——它什么都没在跑。
   const inFlight = await env.DB.prepare(
-    `SELECT id FROM runs WHERE project_id = ? AND state IN ('proposed', 'dispatched', 'running') ORDER BY lab_no DESC LIMIT 1`,
+    `SELECT id FROM runs WHERE project_id = ?
+       AND (state IN ('dispatched', 'running') OR (state = 'proposed' AND cybion_thread_id IS NOT NULL))
+     ORDER BY lab_no DESC LIMIT 1`,
   )
     .bind(project.id)
     .first<{ id: string }>();
