@@ -101,10 +101,12 @@ projectIdeaRoutes.get('/:slug/idea', async (c) => {
     const response = await readThreadResponse(c.env, apiKey, project.idea_thread_id);
     // 回复必须是对「最近一次请求」的：旧回复不能当成新思路，否则表单会填上上一轮的内容。
     const fresh = response?.input_record_id != null && response.input_record_id === project.idea_request_record_id;
-    const idea = fresh ? extractIdea(response) : null;
+    // 只有这一轮真的说完了才算有结果：in_flight 时它可能连 assistant message 都还没写出来。
+    const finished = fresh && response?.status === 'completed';
+    const idea = finished ? extractIdea(response) : null;
     return c.json({
       thread_id: project.idea_thread_id,
-      status: idea ? 'ready' : fresh ? 'empty' : 'pending',
+      status: !fresh ? 'pending' : !finished ? 'pending' : idea ? 'ready' : 'empty',
       idea_md: idea,
       requested_at: project.idea_requested_at,
     });
