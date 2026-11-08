@@ -112,7 +112,9 @@ export function ProjectPage() {
   const toggleOpening = () => {
     const next = !opening;
     setOpening(next);
-    if (next && !idea.trim() && !startIdea.isPending) {
+    // 已经在想的那一轮不用再催一次：只把轮询打开，等它说完。
+    const alreadyThinking = ideaQuery.data?.status === 'pending' || startIdea.isPending;
+    if (next && !idea.trim() && !alreadyThinking) {
       startIdea.mutate(undefined, { onSuccess: () => ideaQuery.refetch() });
     }
   };
