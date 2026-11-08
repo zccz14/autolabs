@@ -27,13 +27,15 @@ const STATE_FILTERS = ['all', 'frozen', 'rejected', 'proposed', 'dispatched', 'r
 type StateFilter = (typeof STATE_FILTERS)[number];
 
 /** 目录的一行只放摘要：完整的思路与结果在 run 详情里，这里靠 CSS 截到两行。 */
-function excerpt(md: string | null, fallback: string): string {
+function excerpt(md: string | null, fallback: string, limit = 200): string {
   if (!md) return fallback;
   const text = md
     .replace(/[#*`>|~_-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return text || fallback;
+  if (!text) return fallback;
+  // 目录一屏可能有几十行，正文只留够填满两行的量：DOM 里不放整篇 README。
+  return text.length > limit ? `${text.slice(0, limit)}…` : text;
 }
 
 export function ProjectPage() {
@@ -173,7 +175,7 @@ export function ProjectPage() {
             <div className="overflow-x-auto">
               <table className="plain w-full min-w-[44rem] max-w-[72rem] table-fixed">
                 <colgroup>
-                  <col style={{ width: '4.5rem' }} />
+                  <col style={{ width: '6.5rem' }} />
                   <col style={{ width: '6.5rem' }} />
                   <col />
                   <col />
@@ -195,7 +197,7 @@ export function ProjectPage() {
                 <tbody>
                   {visibleRuns.map((run) => (
                     <tr key={run.id}>
-                      <td className="font-mono">
+                      <td className="font-mono whitespace-nowrap">
                         <Link to={`/runs/${run.id}`} className="text-primary underline-offset-4 hover:underline">
                           {run.lab}
                         </Link>
@@ -346,7 +348,7 @@ export function ProjectPage() {
               {detail.data.sota_events.map((event) => (
                 <tr key={event.id}>
                   <td>{event.action}</td>
-                  <td className="font-mono text-xs">
+                  <td className="font-mono text-xs whitespace-nowrap">
                     {event.lab ? (
                       <Link to={`/runs/${event.run_id}`} className="text-primary underline-offset-4 hover:underline">
                         {event.lab}
