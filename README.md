@@ -53,7 +53,7 @@ proposed → dispatched → running → frozen | rejected | lost
 
 ## 开一轮实验会发生什么
 
-开 run 就是**发出**这一轮，不是先登记再手动绑 Thread。思路可以先由这个项目的 **master thread**（一条长期的 Cybion Thread）读完整个研究地图后写出来——点「开新一轮实验」时它会自动开始诊断，写好的思路填进表单，你可以直接改：
+开 run 就是**发出**这一轮，不是先登记再手动绑 Thread。思路可以先由这个项目的 **master thread**（一条长期的 Cybion Thread）写出来——点「开新一轮实验」时它会自动开始诊断，写好的思路填进表单，你可以直接改。它收到的是一张**地图速览**（每个 lab 一行 + 最近几轮全文），细节由它拿只读令牌按需去取：
 
 
 

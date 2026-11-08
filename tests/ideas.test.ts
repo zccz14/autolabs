@@ -14,9 +14,12 @@ const brief = buildIdeaBrief({
       unit: 'number',
       direction: 'higher-better',
       required: true,
+      is_primary: true,
       definition_md: '年化收益 / 年化波动，无风险利率取 0。',
     },
   ],
+  readerToken: 'alb_read_secret',
+  origin: 'https://autolabs.ntnl.io',
   runs: [
     {
       lab: 'lab-0001',
@@ -85,5 +88,53 @@ describe('从 Cybion 回复里取思路', () => {
       }),
     ).toBeNull();
     expect(extractIdea(null)).toBeNull();
+  });
+});
+
+describe('地图不能把几十个实验全文倒进去', () => {
+  const metrics = [
+    { key: 'cumulative_return', label: '累计收益率', unit: 'ratio', direction: 'higher-better', required: true, is_primary: true, definition_md: '样本外全区间累计收益，扣全部成本。' },
+    { key: 'sharpe', label: '夏普', unit: 'number', direction: 'higher-better', required: true, is_primary: false, definition_md: '年化收益 / 年化波动。' },
+  ];
+  const many = Array.from({ length: 83 }, (_, index) => ({
+    lab: `lab-${String(index + 1).padStart(4, '0')}`,
+    state: index % 3 === 0 ? 'frozen' : 'rejected',
+    idea: '把信号窗口从 5 日拉到 20 日，看夏普能不能站住；同时排除掉用同日收盘排名的那种做法。'.repeat(2),
+    report: '样本外夏普变化不大，但频率跌破硬约束，不能进入 SOTA。'.repeat(2),
+    metrics: { cumulative_return: 0.1 + index / 100, sharpe: 1.4 - index / 200 },
+    gates: [
+      { rule_id: 'no-future-leak', pass: index % 3 === 0, evidence: '用了同日收盘后的排名，属于执行层未来信息' },
+      { rule_id: 'canonical-byte-equal', pass: true, evidence: '逐字节一致' },
+    ],
+  }));
+
+  const compact = buildIdeaBrief({
+    projectSlug: 'q-labs',
+    projectName: 'Q-Labs',
+    description: '股指期货日内策略研究',
+    labCount: 83,
+    sotaLab: 'lab-0001',
+    metrics,
+    runs: many,
+    readerToken: 'alb_read_secret',
+    origin: 'https://autolabs.ntnl.io',
+  });
+
+  it('83 个实验压在一万六千字以内（原来倒全文是四万三千字）', () => {
+    expect(compact.length).toBeLessThan(16000);
+  });
+
+  it('每个实验仍然留一行，不用翻接口也知道大概', () => {
+    expect((compact.match(/^- lab-/gm) ?? [])).toHaveLength(83);
+  });
+
+  it('没过门禁的死因写在一行里，不用展开', () => {
+    expect(compact).toContain('挂 no-future-leak（用了同日收盘后的排名');
+  });
+
+  it('给一把只读令牌与两个接口，细节自己去取', () => {
+    expect(compact).toContain('GET https://autolabs.ntnl.io/api/v1/projects/q-labs/runs');
+    expect(compact).toContain('Authorization: Bearer alb_read_secret');
+    expect(compact).toContain('别一次全拉');
   });
 });

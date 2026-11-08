@@ -9,6 +9,7 @@ import { buildIdeaBrief, extractIdea } from '../ideas';
 import { currentMetrics, listRuns, recordEvent } from '../store';
 import { labLabel } from '../labs';
 import { nowSeconds } from '../ids';
+import { mintProjectToken } from '../tokens';
 
 /**
  * 「下一轮做什么」：项目绑一条思路线程（master thread），它读整张研究地图、
@@ -44,6 +45,20 @@ projectIdeaRoutes.post('/:slug/idea', async (c) => {
 
     const [definitions, runs] = await Promise.all([currentMetrics(c.env, project.id), listRuns(c.env, project.id, 500)]);
     const sota = runs.find((run) => run.id === project.sota_run_id);
+    // 只读令牌：地图只给速览，细节让它自己按需去取。每次请求换一把，旧的当场吊销。
+    const ideaLabel = `idea · ${project.slug}`;
+    const reader = await mintProjectToken();
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE project_tokens SET revoked_at = ? WHERE project_id = ? AND label = ? AND revoked_at IS NULL`).bind(
+        nowSeconds(),
+        project.id,
+        ideaLabel,
+      ),
+      c.env.DB.prepare(
+        `INSERT INTO project_tokens (id, project_id, label, secret_sha256, capabilities, created_by, created_at, expires_at)
+         VALUES (?, ?, ?, ?, 'read', ?, ?, ?)`,
+      ).bind(reader.id, project.id, ideaLabel, reader.secretSha256, principal.userId, nowSeconds(), nowSeconds() + 30 * 86400),
+    ]);
     const brief = buildIdeaBrief({
       projectSlug: project.slug,
       projectName: project.name,
@@ -56,8 +71,11 @@ projectIdeaRoutes.post('/:slug/idea', async (c) => {
         unit: definition.unit,
         direction: definition.direction,
         required: Boolean(definition.required),
+        is_primary: Boolean(definition.is_primary),
         definition_md: definition.definition_md,
       })),
+      readerToken: reader.token,
+      origin: new URL(c.req.url).origin,
       runs: [...runs]
         .sort((left, right) => left.lab_no - right.lab_no)
         .map((run) => ({
