@@ -18,7 +18,9 @@ import {
   type RunRow,
 } from '../store';
 import { matchMetrics, missingRequiredMetrics } from '../metrics';
-import { withExclusion } from '../runs';
+import { createThread, sendInput } from '../cybion';
+import { mintProjectToken } from '../tokens';
+import { buildRunBrief, withExclusion } from '../runs';
 import { viewRun } from './projects';
 import { blobKey } from './snapshots';
 
@@ -62,8 +64,26 @@ projectRunRoutes.post('/:slug/runs', async (c) => {
       createdAt,
     ),
   ]);
-  const run = await findRun(c.env, id);
-  return c.json({ run: viewRun(run as RunRow) }, 201);
+  const run = (await findRun(c.env, id)) as RunRow;
+  // 开一轮实验＝真的把这一轮发出去：建 Thread、发首条输入、置 dispatched。
+  // 发不出去就留在 proposed，把原文回给调用方——不假装发出去了。
+  const dispatched = await startRunThread(c.env, new URL(c.req.url).origin, access.project, run, principal.userId)
+    .then((started) => ({ ok: true as const, run: started }))
+    .catch(async (error: Error) => {
+      await recordEvent(c.env, 'run.dispatch_failed', access.project.id, principal.userId, {
+        run_id: run.id,
+        error: error.message,
+      });
+      return { ok: false as const, error: error.message };
+    });
+  const latest = dispatched.ok ? dispatched.run : ((await findRun(c.env, id)) as RunRow);
+  return c.json(
+    {
+      run: viewRun(latest),
+      dispatch: dispatched.ok ? { ok: true } : { ok: false, error: dispatched.error },
+    },
+    201,
+  );
 });
 
 projectRunRoutes.get('/:slug/leaderboard', async (c) => {
@@ -163,19 +183,119 @@ runRoutes.get('/:runId', async (c) => {
   return c.json({ run: viewRun(run) });
 });
 
-/** 把 Cybion Thread 绑到这一轮：Thread 才是真正的执行体。 */
-runRoutes.post('/:runId/dispatch', async (c) => {
-  const { run, access, principal } = await accessRun(c.env, c.req.raw, c.req.param('runId'), 'runner');
-  const payload = await readJson<Record<string, unknown>>(c);
-  const threadId = requireString(payload.cybion_thread_id, 'cybion_thread_id', 120);
-  if (run.state === 'frozen' || run.state === 'rejected') return fail(409, 'already_settled', '该 run 已结算');
-  await c.env.DB.prepare(`UPDATE runs SET state = 'running', cybion_thread_id = ? WHERE id = ?`).bind(threadId, run.id).run();
-  await recordEvent(c.env, 'run.dispatched', access.project.id, principal?.userId ?? null, {
-    run_id: run.id,
-    cybion_thread_id: threadId,
+/**
+ * 把这一轮发出去。没有 Thread 就开一个，然后发首条输入，最后置 dispatched。
+ *
+ * 分三步落库是为了失败可重试：Thread 一建出来就先记下 id，重试时复用它。
+ * external_ref 只是给人看的集成标记，Cybion 不拿它去重，所以重试绝不能再开一个。
+ */
+async function startRunThread(
+  env: Env,
+  origin: string,
+  project: { id: string; slug: string; name: string },
+  run: RunRow,
+  actorUserId: string,
+): Promise<RunRow> {
+  let threadId = run.cybion_thread_id;
+  if (!threadId) {
+    const thread = await createThread(env, {
+      externalRef: run.external_ref,
+      title: `${labLabel(run.lab_no)} · ${project.name}`,
+    });
+    threadId = thread.id;
+    await env.DB.prepare(`UPDATE runs SET cybion_thread_id = ? WHERE id = ?`).bind(threadId, run.id).run();
+  }
+  // 执行体要凭一把令牌回传结论：每轮一把，只覆盖 read/write/verdict，30 天到期。
+  const minted = await mintProjectToken();
+  const createdAt = nowSeconds();
+  const expiresAt = createdAt + 30 * 86400;
+  await env.DB.prepare(
+    `INSERT INTO project_tokens (id, project_id, label, secret_sha256, capabilities, created_by, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(minted.id, project.id, `verdict · ${labLabel(run.lab_no)} · ${run.id}`, minted.secretSha256, 'read,write,verdict', actorUserId, createdAt, expiresAt)
+    .run();
+  const definitions = await currentMetrics(env, project.id);
+  const brief = buildRunBrief({
+    lab: labLabel(run.lab_no),
+    projectSlug: project.slug,
+    projectName: project.name,
+    runId: run.id,
+    externalRef: run.external_ref,
+    origin,
+    snapshotId: run.input_snapshot_id,
+    treeSha: await snapshotTreeSha(env, run.input_snapshot_id),
+    idea: run.idea_md,
+    note: run.note,
+    metrics: definitions.map((definition) => ({
+      key: definition.key,
+      label: definition.label,
+      unit: definition.unit,
+      direction: definition.direction,
+      required: Boolean(definition.required),
+      definition_md: definition.definition_md,
+    })),
+    verdictToken: minted.token,
+    tokenExpiresAt: expiresAt,
   });
-  const updated = await findRun(c.env, run.id);
-  return c.json({ run: viewRun((updated ?? run) as RunRow) });
+  await sendInput(env, threadId, brief);
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE runs SET state = 'dispatched' WHERE id = ? AND state = 'proposed'`).bind(run.id),
+    env.DB.prepare(`INSERT INTO events (id, project_id, kind, payload, actor_user_id, created_at) VALUES (?, ?, 'run.dispatched', ?, ?, ?)`).bind(
+      newId('evt'),
+      project.id,
+      JSON.stringify({ run_id: run.id, lab: labLabel(run.lab_no), cybion_thread_id: threadId }),
+      actorUserId,
+      nowSeconds(),
+    ),
+  ]);
+  const updated = await findRun(env, run.id);
+  return (updated ?? run) as RunRow;
+}
+
+/** 发出去的 brief 要写清快照的 tree_sha，好让执行体核对它拿到的文件对不对。 */
+async function snapshotTreeSha(env: Env, snapshotId: string): Promise<string> {
+  const row = await env.DB.prepare(`SELECT tree_sha FROM snapshots WHERE id = ?`).bind(snapshotId).first<{ tree_sha: string }>();
+  return row?.tree_sha ?? '';
+}
+
+/** 发一次。不带 thread id 就是「真的发出去」；带 thread id 是换绑到已有的 Thread。 */
+runRoutes.post('/:runId/dispatch', async (c) => {
+  const { run, access, principal: actor } = await accessRun(c.env, c.req.raw, c.req.param('runId'), 'runner');
+  // 'runner' 一定带了身份；accessRun 的返回类型为了 reader 场景才允许 null。
+  const principal = actor!;
+  const raw = await c.req.text();
+  let payload: Record<string, unknown> = {};
+  if (raw.trim()) {
+    try {
+      payload = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return fail(400, 'invalid_json', '请求体必须是 JSON');
+    }
+  }
+  if (run.state === 'frozen' || run.state === 'rejected') return fail(409, 'already_settled', '该 run 已结算');
+  const threadId = optionalString(payload.cybion_thread_id, 'cybion_thread_id', 120);
+  if (threadId) {
+    await c.env.DB.prepare(`UPDATE runs SET state = 'dispatched', cybion_thread_id = ? WHERE id = ?`).bind(threadId, run.id).run();
+    await recordEvent(c.env, 'run.dispatched', access.project.id, principal.userId, {
+      run_id: run.id,
+      cybion_thread_id: threadId,
+      rebind: true,
+    });
+    const updated = await findRun(c.env, run.id);
+    return c.json({ run: viewRun((updated ?? run) as RunRow), dispatch: { ok: true } });
+  }
+  try {
+    const started = await startRunThread(c.env, new URL(c.req.url).origin, access.project, run, principal.userId);
+    return c.json({ run: viewRun(started), dispatch: { ok: true } });
+  } catch (error) {
+    await recordEvent(c.env, 'run.dispatch_failed', access.project.id, principal.userId, {
+      run_id: run.id,
+      error: (error as Error).message,
+    });
+    const latest = (await findRun(c.env, run.id)) ?? run;
+    return c.json({ run: viewRun(latest as RunRow), dispatch: { ok: false, error: (error as Error).message } });
+  }
 });
 
 /**

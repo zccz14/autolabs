@@ -28,7 +28,9 @@
   "vars": {
     "AUTH_ISSUER": "https://auth.ntnl.io",
     "AUTH_AUDIENCE": "autolabs.ntnl.io",
-    "FIRMAMENT_BASE_URL": "https://firma.ntnl.io"
+    "FIRMAMENT_BASE_URL": "https://firma.ntnl.io",
+    // 开一轮实验要真的建 Thread：地址是公开的，凭证 CYBION_API_KEY 在 Worker secret 里。
+    "CYBION_BASE_URL": "https://cybion.ntnl.io"
   },
 
   "routes": [{ "pattern": "autolabs.ntnl.io", "custom_domain": true }],
