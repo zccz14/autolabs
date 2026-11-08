@@ -51,6 +51,17 @@ proposed → dispatched → running → frozen | rejected | lost
 
 项目详情的「目录」页签把这三列并排列出来，可以按状态过滤；完整内容在 run 详情里按 Markdown 渲染。设计取舍见 [ADR 0002](docs/decisions/0002-research-map.md)。
 
+## 开一轮实验会发生什么
+
+开 run 就是**发出**这一轮，不是先登记再手动绑 Thread：
+
+1. 平台分配 `lab-000N` 与 `external_ref = autolabs:<slug>:<lab-000N>`，钉住输入快照。
+2. 平台用 Worker 里的 Cybion API key（`CYBION_API_KEY`，只存在 secret 里）在这一轮的 owner 的 Cybion 里开一个 Thread，标题是 `lab-000N · <项目名>`。
+3. 平台给这一轮签一把只覆盖 `read/write/verdict` 的项目凭据，连同「要验什么、文件在哪、指标口径、结论往哪报」写成第一条输入发进 Thread——这一步才真正开始跑。
+4. Thread id 写回这一行、状态置 `dispatched`。
+
+第 2 步一建出 Thread 就先落库，所以重试不会在 Cybion 里开出第二个 Thread（`external_ref` 只是给人看的标记，Cybion 不拿它去重）。任何一步失败，这一轮都留在 `proposed`，`dispatch.error` 带回原文，run 详情页可以点「发出这一轮」重试。
+
 ## 机器同步协议（给 Cybion 的 Thread）
 
 机器上只需要 `curl`，不需要 git，也不需要 GitHub 凭据。凭据是项目级的 `alb_…` token（在项目页签发，可吊销、可过期）。
@@ -91,7 +102,7 @@ curl -sX PUT --data-binary @outputs/canonical.txt \
 | `GET` | `/api/v1/snapshots/{id}/diff?against=` | 路径级差异 |
 | `POST` | `/api/v1/snapshots/{id}/freeze` | 冻结（不可逆） |
 | `GET` `POST` | `/api/v1/projects/{slug}/runs` | 实验列表 / 开新一轮 |
-| `POST` | `/api/v1/runs/{id}/dispatch` | 绑定 Cybion Thread |
+| `POST` | `/api/v1/runs/{id}/dispatch` | 重发 / 换绑 Cybion Thread（开 run 时已经自动发过一次） |
 | `POST` | `/api/v1/runs/{id}/verdict` | 上报门禁与指标（判定权在平台） |
 | `GET` `POST` | `/api/v1/projects/{slug}/metrics` | 指标契约（每次写入 = 新版本） |
 | `POST` | `/api/v1/projects/{slug}/metrics/{key}/retire` | 退役一个指标 |

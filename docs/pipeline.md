@@ -57,7 +57,7 @@
 ## 四、一轮实验在平台上的生命周期
 
 ```
-propose ──► 快照（run_conceptual.py 等）──► dispatch（Cybion Thread，external_ref 幂等）
+propose ──► 快照（run_conceptual.py 等）──► dispatch（真的建 Cybion Thread 并发首条输入）
       ──► 机器侧执行 ──► 上报 verdict（metrics/gates/output）──► 平台判定
       ──► 全过 = frozen，可晋升 SOTA；不全过 = rejected，写 residual 开下一个 lab
 ```
