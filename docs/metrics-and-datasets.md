@@ -38,7 +38,7 @@ project_metrics
 | `count` | 笔数（`1493`） | 整数或两位小数 |
 | `bps` / `seconds` | 基点 / 秒 | 原样 |
 
-夏普是「每单位波动换来多少收益」的倍数，不是比例。它被当 `ratio` 报了整整一轮，榜单上就显示成 `193.22%`——这是把 1.9322 当成 193.22% 的读数错误，不是策略特别好。所以模板里 `sharpe` 的单位是 `number`；已有项目按「只追加」的规矩升一版（`migrations/0004_sharpe_dimensionless.sql`），历史 run 仍然钉着它当时那一版。
+夏普是「每单位波动换来多少收益」的倍数，不是比例。它被当 `ratio` 报了整整一轮，榜单上就显示成 `193.22%`——这是把 1.9322 当成 193.22% 的读数错误，不是策略特别好。所以模板里 `sharpe` 的单位是 `number`；已有项目按「只追加」的规矩升一版（`migrations/0004_sharpe_dimensionless.sql`），历史 run 仍然钉着它当时那一版。新版落地后，被取代的 `ratio` 版由 `migrations/0006_retire_superseded_sharpe.sql` 标记退役：只下线「已经有更高版本」的旧版，某项目若只有 `ratio` 版，它仍是该项目的当前口径。
 
 ## 二、数据集：由 Firmament 定义，AutoLabs 只钉摘要
 

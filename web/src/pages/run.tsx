@@ -6,15 +6,24 @@ import { Input } from '../components/ui/input';
 import { Empty, ErrorNote, Field, Section, StatePill, when } from '../ui';
 import { useCopy } from '../copy';
 import { useDispatchRun, usePromoteSota, useRun, useVerdict, type SdkLike } from '../api';
+import { Markdown } from '../markdown';
 
+// 真实门禁只有两条：no-future-leak 与 canonical-byte-equal。
+// metrics-reported 由平台在 verdict 时补，不用客户端上报，示例里也不该出现。
 const SAMPLE_VERDICT = JSON.stringify(
   {
     gates: [
       { rule_id: 'no-future-leak', pass: true, evidence: 'causal-execution-audit: 全部门槛只用到入场时可知字段' },
-      { rule_id: 'min-sample', pass: true, evidence: 'out-of-sample 交易 1493 笔' },
       { rule_id: 'canonical-byte-equal', pass: true, evidence: 'run_optimized 与 run_conceptual 的 canonical.txt 逐字节一致' },
     ],
-    metrics: { cumulative_return: 0.3092, sharpe: 0.9, max_drawdown: -0.1775, trades: 1493 },
+    metrics: {
+      cumulative_return: 0.3092,
+      annualized_return: 0.1196,
+      max_drawdown: -0.1775,
+      sharpe: 0.9,
+      trades: 1493,
+      avg_daily_trades: 0.4641,
+    },
     report_md: '## 结论\n\n因果口径下收益转正，但频率跌破硬约束，不能进入 SOTA。',
   },
   null,
@@ -152,10 +161,10 @@ export function RunPage() {
 
         <Section title={t('label.metrics')}>
           <pre className="block">{run.metrics ? JSON.stringify(run.metrics, null, 2) : '—'}</pre>
-          <h3 className="mt-3 mb-1 text-xs font-semibold">{t('label.idea')}</h3>
-          <pre className="block">{run.idea_md ?? '—'}</pre>
-          <h3 className="mt-3 mb-1 text-xs font-semibold">{t('label.report')}</h3>
-          <pre className="block">{run.report_md ?? '—'}</pre>
+          <h3 className="mt-4 mb-1 text-xs font-semibold">{t('label.idea')}</h3>
+          {run.idea_md ? <Markdown>{run.idea_md}</Markdown> : <p className="text-xs text-muted-foreground">{t('label.ideaEmpty')}</p>}
+          <h3 className="mt-4 mb-1 text-xs font-semibold">{t('label.report')}</h3>
+          {run.report_md ? <Markdown>{run.report_md}</Markdown> : <p className="text-xs text-muted-foreground">{t('label.none')}</p>}
         </Section>
       </div>
     </div>

@@ -127,11 +127,13 @@ routes.get('/:slug', async (c) => {
     countRuns(c.env, access.project.id),
     countSnapshots(c.env, access.project.id),
   ]);
+  // 账本按 lab 号说话，和目录、榜单同一套编号；run id 只是外键，不给人读。
+  const labByRun = new Map(runs.map((run) => [run.id, labLabel(run.lab_no)]));
   return c.json({
     project: viewProject(access, { run_count: runCount, snapshot_count: snapshotCount }),
     runs: runs.map(viewRun),
     snapshots: snapshots.map(viewSnapshot),
-    sota_events: sotaEvents,
+    sota_events: sotaEvents.map((event) => ({ ...event, lab: labByRun.get(event.run_id) ?? null })),
   });
 });
 
