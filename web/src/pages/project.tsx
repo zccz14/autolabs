@@ -20,6 +20,18 @@ import { formatMetricValue } from '../metrics-format';
 
 type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots' | 'tokens';
 
+/** 目录的状态筛选：先给最常见的前三个，其余按 run 生命周期补齐。 */
+const STATE_FILTERS = ['all', 'frozen', 'rejected', 'proposed', 'dispatched', 'running', 'lost'] as const;
+type StateFilter = (typeof STATE_FILTERS)[number];
+
+/** 目录的一行只放摘要：完整的思路与结果在 run 详情里。 */
+function excerpt(md: string | null, fallback: string, limit = 72): string {
+  if (!md) return fallback;
+  const text = md.replace(/[#*`>\-]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return fallback;
+  return text.length > limit ? `${text.slice(0, limit)}…` : text;
+}
+
 export function ProjectPage() {
   const t = useCopy();
   const { slug } = useParams<{ slug: string }>();
@@ -30,12 +42,14 @@ export function ProjectPage() {
   const freeze = useFreezeSnapshot(typed);
   const metricDefs = useMetrics(typed, slug);
   const [tab, setTab] = useState<Tab>('runs');
+  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
 
   if (!slug) return null;
   const project = detail.data?.project;
   const runs = detail.data?.runs ?? [];
   const snapshots = detail.data?.snapshots ?? [];
   const frozen = runs.filter((run) => run.state === 'frozen');
+  const visibleRuns = stateFilter === 'all' ? runs : runs.filter((run) => run.state === stateFilter);
   const definitions = [...(metricDefs.data?.metrics ?? [])].sort((a, b) => a.sort_order - b.sort_order);
   const primary = definitions.find((metric) => metric.is_primary);
   // 榜单按主指标排序：数字缺失的沉底，方向按口径来（回撤这种越低越好）。
@@ -97,19 +111,32 @@ export function ProjectPage() {
         runs.length === 0 ? (
           <Empty>{t('empty.runs')}</Empty>
         ) : (
-          <Section title={t('label.runs')}>
+          <Section title={t('label.directory')} description={t('desc.directory')}>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {STATE_FILTERS.map((value) => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant={stateFilter === value ? 'default' : 'outline'}
+                  onClick={() => setStateFilter(value)}
+                >
+                  {value === 'all' ? t('label.all') : value}
+                </Button>
+              ))}
+            </div>
             <table className="plain">
               <thead>
                 <tr>
                   <th>lab</th>
                   <th>{t('label.state')}</th>
+                  <th>{t('label.idea')}</th>
+                  <th>{t('label.result')}</th>
+                  <th>{primary ? primary.label : t('label.metrics')}</th>
                   <th>{t('label.gates')}</th>
-                  <th>external_ref</th>
-                  <th>created</th>
                 </tr>
               </thead>
               <tbody>
-                {runs.map((run) => (
+                {visibleRuns.map((run) => (
                   <tr key={run.id}>
                     <td className="font-mono">
                       <Link to={`/runs/${run.id}`} className="text-primary underline-offset-4 hover:underline">
@@ -119,15 +146,21 @@ export function ProjectPage() {
                     <td>
                       <StatePill state={run.state} />
                     </td>
+                    <td className="max-w-[18rem] text-xs text-muted-foreground">{excerpt(run.idea_md, t('label.ideaEmpty'))}</td>
+                    <td className="max-w-[18rem] text-xs text-muted-foreground">{excerpt(run.report_md, t('label.none'))}</td>
+                    <td className="text-xs">
+                      {primary && typeof run.metrics?.[primary.key] === 'number'
+                        ? formatMetricValue(run.metrics[primary.key] as number, primary.unit)
+                        : '—'}
+                    </td>
                     <td>
                       {run.gates.length === 0 ? '—' : `${run.gates.filter((gate) => gate.pass).length}/${run.gates.length}`}
                     </td>
-                    <td className="font-mono text-xs text-muted-foreground">{run.external_ref}</td>
-                    <td className="text-xs text-muted-foreground">{when(run.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {visibleRuns.length === 0 ? <p className="mt-3 text-xs text-muted-foreground">{t('label.none')}</p> : null}
           </Section>
         )
       ) : null}
@@ -266,14 +299,14 @@ export function ProjectPage() {
 
 function labelForTab(
   tab: Tab,
-  t: (key: 'label.runs' | 'label.leaderboard' | 'label.metricsTab' | 'label.datasetTab' | 'label.snapshots' | 'label.tokens') => string,
+  t: (key: 'label.directory' | 'label.leaderboard' | 'label.metricsTab' | 'label.datasetTab' | 'label.snapshots' | 'label.tokens') => string,
 ) {
   if (tab === 'metrics') return t('label.metricsTab');
   if (tab === 'dataset') return t('label.datasetTab');
   if (tab === 'leaderboard') return t('label.leaderboard');
   if (tab === 'snapshots') return t('label.snapshots');
   if (tab === 'tokens') return t('label.tokens');
-  return t('label.runs');
+  return t('label.directory');
 }
 
 function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {

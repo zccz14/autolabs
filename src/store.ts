@@ -48,6 +48,8 @@ export interface RunRow {
   metric_set_json: string | null;
   cybion_thread_id: string | null;
   note: string;
+  /** 研究地图的叙事轴：这个实验想验证什么。与 report_md（结果）并列。 */
+  idea_md: string | null;
   report_md: string | null;
   metrics_json: string | null;
   gates_json: string | null;

@@ -37,6 +37,7 @@ projectRunRoutes.post('/:slug/runs', async (c) => {
   const access = await loadProject(c.env, c.req.param('slug'), principal, 'runner', 'write');
   const payload = await readJson<Record<string, unknown>>(c);
   const note = optionalString(payload.note, 'note', 2000) ?? '';
+  const idea = optionalString(payload.idea_md, 'idea_md', 20000) ?? null;
   const requestedSnapshot = optionalString(payload.input_snapshot_id, 'input_snapshot_id', 80);
   const snapshot = requestedSnapshot
     ? await latestSnapshot(c.env, access.project.id)
@@ -50,9 +51,9 @@ projectRunRoutes.post('/:slug/runs', async (c) => {
   const createdAt = nowSeconds();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO runs (id, project_id, lab_no, external_ref, state, input_snapshot_id, dataset_pin_id, note, created_by, created_at)
-       VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?)`,
-    ).bind(id, access.project.id, labNo, ref, inputSnapshotId, access.project.dataset_pin_id, note, principal.userId, createdAt),
+      `INSERT INTO runs (id, project_id, lab_no, external_ref, state, input_snapshot_id, dataset_pin_id, note, idea_md, created_by, created_at)
+       VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, access.project.id, labNo, ref, inputSnapshotId, access.project.dataset_pin_id, note, idea, principal.userId, createdAt),
     c.env.DB.prepare(`INSERT INTO events (id, project_id, kind, payload, actor_user_id, created_at) VALUES (?, ?, 'run.proposed', ?, ?, ?)`).bind(
       newId('evt'),
       access.project.id,
@@ -224,6 +225,8 @@ runRoutes.post('/:runId/verdict', async (c) => {
     },
   ];
   const report = optionalString(payload.report_md, 'report_md', 200000) ?? null;
+  // 思路可以在 verdict 时补写，但不能覆盖已经写下的那一条。
+  const idea = optionalString(payload.idea_md, 'idea_md', 20000) ?? run.idea_md;
   const metrics = payload.metrics ?? null;
   if (metrics !== null && (typeof metrics !== 'object' || Array.isArray(metrics))) {
     return fail(400, 'invalid_metrics', 'metrics 必须是对象');
@@ -270,7 +273,7 @@ runRoutes.post('/:runId/verdict', async (c) => {
   const allPass = withMetricGate.every((gate) => gate.pass);
   const state = allPass ? 'frozen' : 'rejected';
   await c.env.DB.prepare(
-    `UPDATE runs SET state = ?, gates_json = ?, metrics_json = ?, metric_set_json = ?, report_md = ?, output_snapshot_id = ?, settled_at = ? WHERE id = ?`,
+    `UPDATE runs SET state = ?, gates_json = ?, metrics_json = ?, metric_set_json = ?, report_md = ?, idea_md = ?, output_snapshot_id = ?, settled_at = ? WHERE id = ?`,
   )
     .bind(
       state,
@@ -278,6 +281,7 @@ runRoutes.post('/:runId/verdict', async (c) => {
       metrics === null ? null : JSON.stringify(metrics),
       JSON.stringify(metricSet),
       report,
+      idea,
       outputSnapshotId,
       nowSeconds(),
       run.id,

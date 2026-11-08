@@ -152,6 +152,8 @@ export function RunPage() {
 
         <Section title={t('label.metrics')}>
           <pre className="block">{run.metrics ? JSON.stringify(run.metrics, null, 2) : '—'}</pre>
+          <h3 className="mt-3 mb-1 text-xs font-semibold">{t('label.idea')}</h3>
+          <pre className="block">{run.idea_md ?? '—'}</pre>
           <h3 className="mt-3 mb-1 text-xs font-semibold">{t('label.report')}</h3>
           <pre className="block">{run.report_md ?? '—'}</pre>
         </Section>
