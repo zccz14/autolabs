@@ -58,7 +58,8 @@ export function ProjectPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [opening, setOpening] = useState(false);
   const startIdea = useStartIdea(typed, slug);
-  const ideaQuery = useProjectIdea(typed, slug, opening);
+  // 项目页一打开就问一次状态：地图没变的话，开表单是直接复用，不再烧一轮。
+  const ideaQuery = useProjectIdea(typed, slug, Boolean(slug));
   // 趋势图默认画主指标；用户可以按指标切。
   const [trendKey, setTrendKey] = useState<string | null>(null);
   const [idea, setIdea] = useState('');
@@ -114,7 +115,8 @@ export function ProjectPage() {
     setOpening(next);
     // 已经在想的那一轮不用再催一次：只把轮询打开，等它说完。
     const alreadyThinking = ideaQuery.data?.status === 'pending' || startIdea.isPending;
-    if (next && !idea.trim() && !alreadyThinking) {
+    const stillValid = ideaQuery.data?.fresh === true;
+    if (next && !idea.trim() && !alreadyThinking && !stillValid) {
       startIdea.mutate(undefined, { onSuccess: () => ideaQuery.refetch() });
     }
   };
