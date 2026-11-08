@@ -165,10 +165,13 @@ export function RunPage() {
       </div>
 
       <Section title={t('label.ideaAndReport')} description="地图上的两列叙事：先看它想验证什么，再看它得到了什么。">
+        {/* 叙事是散文，不是表格：一行别拉到 1300px，读起来会丢行。 */}
+        <div className="max-w-4xl">
         <h3 className="mb-1 text-xs font-semibold">{t('label.idea')}</h3>
         {run.idea_md ? <Markdown>{run.idea_md}</Markdown> : <p className="text-xs text-muted-foreground">{t('label.ideaEmpty')}</p>}
         <h3 className="mt-4 mb-1 text-xs font-semibold">{t('label.report')}</h3>
         {run.report_md ? <Markdown>{run.report_md}</Markdown> : <p className="text-xs text-muted-foreground">{t('label.none')}</p>}
+        </div>
       </Section>
     </div>
   );
