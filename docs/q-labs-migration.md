@@ -137,4 +137,5 @@ npx wrangler d1 execute autolabs --remote --config wrangler.jsonc \
 
 - **29 个 lab 没有 `metrics.csv`**，只有 README 散文 → 判 rejected（见第四节），榜单上只有 51 条；
 - **没迁 `cs_lab*` / `fmab_lab*`**（见第一节）；
+- **思路没有迁。** 迁进来的是每个 lab 的 `README.md`，落在 `report_md`（结果）。但 `idea_md`（这个 lab 当初想验证什么、排除过哪些做法）没有可靠的来源——它散在 README 的引言与脚本注释里，正则抽取会抄错，宁可留空。所以 `q-labs` 的地图目前只有结果轴与指标轴，叙事轴缺一半；补法是人工挑几十条回填，而不是猜。
 - **没有在 AutoLabs 里重新执行任何一个 lab**——AutoLabs 是控制面，计算发生在你自己的机器上，这条不因为迁移而破例。
