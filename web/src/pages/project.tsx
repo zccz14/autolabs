@@ -255,13 +255,11 @@ export function ProjectPage() {
         )
       ) : null}
 
-      {tab === 'leaderboard' ? (
+      {/* 没有指标契约就没有趋势可画：这张卡片整个不出现，别留一个空壳。 */}
+      {tab === 'leaderboard' && definitions.length > 0 ? (
         <Section title={t('label.trend')} description={t('desc.trend')}>
-          {definitions.length === 0 ? (
-            <Empty>{t('label.none')}</Empty>
-          ) : (
-            <>
-              <div className="mb-3 flex flex-wrap gap-2">
+          <>
+            <div className="mb-3 flex flex-wrap gap-2">
                 {definitions.map((metric) => (
                   <Button
                     key={metric.key}
@@ -272,21 +270,20 @@ export function ProjectPage() {
                     {metric.label}
                   </Button>
                 ))}
-              </div>
-              {trendMetric && trendPoints.length > 0 ? (
-                <>
-                  <Suspense fallback={<Empty>正在加载图表…</Empty>}>
-                    <MetricChart points={trendPoints} unit={trendMetric.unit} />
-                  </Suspense>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {trendMetric.label}｜{trendMetric.unit}｜{directionLabel(trendMetric.direction)}｜{trendPoints.length} 个实验报过这个数字
-                  </p>
-                </>
-              ) : (
-                <Empty>还没有实验报过这个指标的数字</Empty>
-              )}
-            </>
-          )}
+            </div>
+            {trendMetric && trendPoints.length > 0 ? (
+              <>
+                <Suspense fallback={<Empty>正在加载图表…</Empty>}>
+                  <MetricChart points={trendPoints} unit={trendMetric.unit} />
+                </Suspense>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {trendMetric.label}｜{trendMetric.unit}｜{directionLabel(trendMetric.direction)}｜{trendPoints.length} 个实验报过这个数字
+                </p>
+              </>
+            ) : (
+              <Empty>还没有实验报过这个指标的数字</Empty>
+            )}
+          </>
         </Section>
       ) : null}
 
