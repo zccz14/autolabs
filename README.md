@@ -31,7 +31,7 @@ AutoLabs 把这些变成类型：编号不可重复、快照不可变、冻结�
 | **Project** | `q-labs` / `lol-labs` / … owner + 成员角色 + 独立 `lab_seq` + 独立授权 |
 | **Snapshot** | 一次不可变的实验文件提交，内容寻址（`tree_sha`），可冻结 |
 | **Run** | 一轮实验：`lab-0007`，编号由项目原子分配、永不复用 |
-| **Lab 元信息** | 目录层的叙事两列：`idea_md`（这个实验想验证什么）与 `report_md`（得到了什么）。指标是第三列。见[已知缺口](#已知缺口思路还没有被记录) |
+| **Lab 元信息** | 目录层的叙事两列：`idea_md`（这个实验想验证什么）与 `report_md`（得到了什么）。指标是第三列。 |
 | **Gate** | `{rule_id, pass, evidence}`，全过才 `frozen`，否则 `rejected` |
 | **SOTA event** | `promote / demote / exclude` + 理由 + 操作者 |
 | **Metric** | 项目级指标契约：key + 单位 + 方向 + **口径说明** + 版本（只追加） |
@@ -43,13 +43,13 @@ AutoLabs 把这些变成类型：编号不可重复、快照不可变、冻结�
 proposed → dispatched → running → frozen | rejected | lost
 ```
 
-## 已知缺口：思路还没有被记录
+## 目录：研究地图的一行
 
-- **结果已有。** `runs.report_md` 在 verdict 时写入，Q-Labs 迁移时取每个 lab 的 `README.md` 原文。但它目前只在 run 详情页整块呈现，不参与任何列表与比较。
-- **思路没有。** 一个 lab 的假设、设计取舍、排除掉的其他做法，只存在于快照里的脚本与注释中，平台不解析、目录不展示。
-- **目录页没有。** 前端只有项目列表、项目详情、run 详情、指标、数据集、令牌，没有任何一处能把多个 lab 的思路、结果、指标并排看。
+- **思路**：`runs.idea_md`，开 run 时必填——这个实验想验证什么、为什么这么设计、排除了哪些做法。
+- **结果**：`runs.report_md`，verdict 时写入；Q-Labs 迁移时取每个 lab 的 `README.md` 原文。
+- **指标**：项目级契约下的一组数字，与上面两列并排。
 
-Phase 1 与 1.5 建好的是地图的下半张：指标契约、门禁、SOTA 账本。上半张——从思路到结果的叙事——是 Phase 2 的第一件事，见 [ADR 0002](docs/decisions/0002-research-map.md)。
+项目详情的「目录」页签把这三列并排列出来，可以按状态过滤；完整内容在 run 详情里按 Markdown 渲染。设计取舍见 [ADR 0002](docs/decisions/0002-research-map.md)。
 
 ## 机器同步协议（给 Cybion 的 Thread）
 
@@ -126,7 +126,7 @@ pnpm deploy                    # 构建 + wrangler deploy，绑定 autolabs.ntnl
 Phase 1（已上线）：项目实体与授权、内容寻址存储、快照与冻结、run 与门禁、SOTA 账本、榜单、对账器。
 Phase 1.5（已上线）：项目级指标契约（带口径、版本化、上报强校验）、Firmament 数据集 pin。
 
-Phase 2（未开始）：`idea_md` 与目录页（见 [ADR 0002](docs/decisions/0002-research-map.md)）、Workflows 主循环、Durable Object 推送、Diff 页、Linkit 通知、residuals。
+Phase 2（进行中）：`idea_md` 与目录页已上线（见 [ADR 0002](docs/decisions/0002-research-map.md)）；未开始：Workflows 主循环、Durable Object 推送、Diff 页、Linkit 通知、residuals。
 
 ## 身份
 
