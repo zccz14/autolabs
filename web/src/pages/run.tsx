@@ -143,7 +143,7 @@ export function RunPage() {
           <p>
             {run.state === 'evaluating' ? t('eval.waiting') : run.metrics ? t('eval.done') : t('eval.none')}
           </p>
-          {run.eval?.error ? <p className="text-destructive">{run.eval.error}</p> : null}
+          {run.state === 'evaluating' && run.eval?.error ? <p className="text-destructive">{run.eval.error}</p> : null}
           {run.eval?.device_address ? (
             <p className="font-mono text-[0.7rem] text-muted-foreground">
               {run.eval.device_address} · {t('eval.attempts')} {run.eval.attempts}
