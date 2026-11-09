@@ -84,15 +84,15 @@ ${input.idea?.trim() || input.note.trim() || '（这一轮没有写思路：按�
 
 - **no-future-leak**：任何一步都只能用入场时可知的字段；引用了当时的未来信息，这一轮就不算数。
 - **canonical-byte-equal**：同一口径下的两次执行，产出必须逐字节一致。
-- 指标按下面的口径算，不要自创 key：
+- **指标不是你的活。** 这一轮做完之后，平台会在用户的机器上跑一条评估命令，把数字算出来。你要做的是让那些数字算得出来——下面这些口径就是它要的东西，不要自创 key：
 ${metricLines}
 
-平台把 \`metrics-reported\` 这条门禁算在自己头上：必报指标缺一个，整轮直接 rejected。门禁全过才是 frozen。
+所以你在第 4 节里只报「实验做完了、我自己跑过哪些检查」。数字由评估器产出，报上来也会被拒。
 
 ## 4. 怎么报结论
 
 \`\`\`http
-POST ${base}/api/v1/runs/${input.runId}/verdict
+POST ${base}/api/v1/runs/${input.runId}/implemented
 Authorization: Bearer <create_thread_token 返回的 token>
 Content-Type: application/json
 \`\`\`
@@ -103,18 +103,17 @@ Content-Type: application/json
     { "rule_id": "no-future-leak", "pass": true, "evidence": "怎么验证的" },
     { "rule_id": "canonical-byte-equal", "pass": true, "evidence": "怎么验证的" }
   ],
-  "metrics": { "…": 0 },
   "report_md": "## 结论\\n\\n……",
   "output_files": { "路径/文件名": "<sha256>" }
 }
 \`\`\`
 
-- \`gates\` 至少一条，如实填；平台不接受「我自己宣布通过」。
-- \`metrics\` 的 key 用第 3 节里的那几个。
-- \`report_md\` 是这一轮的结果：结论、证据、下一步。
+- \`gates\` 至少一条，如实填；平台不接受「我自己宣布通过」。有一条没过，这一轮就到此为止。
+- \`report_md\` 是这一轮的结果：做了什么、怎么验证的、下一步该看什么。
 - \`output_files\` 可选；要带的话，先把文件 \`PUT ${base}/api/v1/projects/${input.projectSlug}/blobs/<sha256>\` 传上来，再用 sha256 引用。
+- **不要报 \`metrics\`**：带了会被直接拒掉。
 - 令牌只证明「你是这条 Thread」，60 秒后过期：发之前现签一张，遇到 401 就再签一张重发。
 
-报完之后这一轮就结算了：全过进榜单，缺门禁或被排除的留在研究地图里当历史。
+报完之后你的事就做完了：这一轮进 \`evaluating\`，等评估器算出数字，才决定它进榜单还是标 rejected。
 `;
 }

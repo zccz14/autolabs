@@ -5,26 +5,18 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Empty, ErrorNote, Field, Section, StatePill, when } from '../ui';
 import { useCopy } from '../copy';
-import { useDispatchRun, usePromoteSota, useRun, useVerdict, type SdkLike } from '../api';
+import { useDispatchRun, useImplemented, usePromoteSota, useRun, type SdkLike } from '../api';
 import { Markdown } from '../markdown';
 
 // 真实门禁只有两条：no-future-leak 与 canonical-byte-equal。
-// metrics-reported 由平台在 verdict 时补，不用客户端上报，示例里也不该出现。
-const SAMPLE_VERDICT = JSON.stringify(
+// 指标不在这里：那是评估器算出来的，执行体只报「实现完成 + 自己跑过哪些检查」。
+const SAMPLE_IMPLEMENTED = JSON.stringify(
   {
     gates: [
       { rule_id: 'no-future-leak', pass: true, evidence: 'causal-execution-audit: 全部门槛只用到入场时可知字段' },
       { rule_id: 'canonical-byte-equal', pass: true, evidence: 'run_optimized 与 run_conceptual 的 canonical.txt 逐字节一致' },
     ],
-    metrics: {
-      cumulative_return: 0.3092,
-      annualized_return: 0.1196,
-      max_drawdown: -0.1775,
-      sharpe: 0.9,
-      trades: 1493,
-      avg_daily_trades: 0.4641,
-    },
-    report_md: '## 结论\n\n因果口径下收益转正，但频率跌破硬约束，不能进入 SOTA。',
+    report_md: '## 结论\n\n实验实现完成、冒烟通过。指标等评估器在设备上算出来。',
   },
   null,
   2,
@@ -37,13 +29,13 @@ export function RunPage() {
   const typed = sdk as unknown as SdkLike | null;
   const query = useRun(typed, runId);
   const dispatch = useDispatchRun(typed);
-  const verdict = useVerdict(typed);
+  const verdict = useImplemented(typed);
   const promote = usePromoteSota(typed, '');
   const location = useLocation();
   // 开 run 时如果没发出去，错误跟着导航一起过来；刷新之后仍然可以点「发出」重试。
   const arrivedError = (location.state as { dispatchError?: string } | null)?.dispatchError ?? null;
   const [localError, setLocalError] = useState<string | null>(arrivedError);
-  const [payload, setPayload] = useState(SAMPLE_VERDICT);
+  const [payload, setPayload] = useState(SAMPLE_IMPLEMENTED);
   const [reason, setReason] = useState('全量样本外通过门禁，风险调整优于当前 SOTA');
 
   const run = query.data?.run;
@@ -146,8 +138,22 @@ export function RunPage() {
         )}
       </Section>
 
+      <Section title={t('label.evaluation')} description={t('eval.hint')}>
+        <div className="flex flex-col gap-1 text-xs">
+          <p>
+            {run.state === 'evaluating' ? t('eval.waiting') : run.metrics ? t('eval.done') : t('eval.none')}
+          </p>
+          {run.eval?.error ? <p className="text-destructive">{run.eval.error}</p> : null}
+          {run.eval?.device_address ? (
+            <p className="font-mono text-[0.7rem] text-muted-foreground">
+              {run.eval.device_address} · {t('eval.attempts')} {run.eval.attempts}
+            </p>
+          ) : null}
+        </div>
+      </Section>
+
       <div className="grid gap-3 lg:grid-cols-2">
-        <Section title={t('action.verdict')} description="把这一步当作 curl 的替身：正式流程由机器上报。">
+        <Section title={t('action.implemented')} description="把这一步当作 curl 的替身：正式流程由机器上报。上报里带 metrics 会被拒。">
           <Field label="payload (JSON)">
             <textarea
               className="min-h-56 w-full rounded-lg border border-border bg-transparent p-2 font-mono text-xs outline-none focus-visible:border-ring"
@@ -167,7 +173,7 @@ export function RunPage() {
                 }
               }}
             >
-              {t('action.verdict')}
+              {t('action.implemented')}
             </Button>
           </div>
         </Section>

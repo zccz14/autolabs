@@ -124,7 +124,11 @@ interface RawResult {
 }
 
 /** 读一次结果；还没结算就返回 null。 */
-export async function readOutcome(env: Env, caller: Identity, call: CallEnvelope): Promise<ShellOutcome | null> {
+export async function readOutcome(
+  env: Env,
+  caller: Identity,
+  call: Pick<CallEnvelope, 'call_id' | 'caller' | 'device' | 'expires_at'>,
+): Promise<ShellOutcome | null> {
   const read = await signed(env, caller, `/api/calls/${call.call_id}`);
   if (read.status !== 200 || !read.json) return null;
   const result = read.json.result as ResultEnvelope | null;

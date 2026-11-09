@@ -22,7 +22,7 @@ export interface MetricDefinition {
   direction: MetricDirection;
   definition_md: string;
   is_primary: boolean;
-  /** 必报指标：run 少了它就不算通过（平台在 verdict 时自动判这条门禁）。 */
+  /** 必报指标：run 少了它就不算通过（评估器交回数字之后，平台自动判这条门禁）。 */
   required: boolean;
   sort_order: number;
 }
