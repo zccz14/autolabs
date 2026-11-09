@@ -198,7 +198,9 @@ export function ProjectPage() {
         <p className={`text-xs ${project?.loop_error ? 'text-destructive' : 'text-muted-foreground'}`}>
           {project?.loop_error
             ? `研究循环已停：${project.loop_error}`
-            : `研究循环运行中：${loopRun ? `${loopRun.lab} ${loopRun.state}` : '正在决定下一轮'}｜上一拍 ${when(project?.loop_last_tick_at ?? null)}`}
+            : project?.loop_state === 'paused'
+              ? `研究循环已暂停${loopRun ? `｜在飞：${loopRun.lab} ${loopRun.state}` : ''}`
+              : `研究循环运行中：${loopRun ? `${loopRun.lab} ${loopRun.state}` : '正在决定下一轮'}｜上一拍 ${when(project?.loop_last_tick_at ?? null)}`}
         </p>
       ) : null}
 
