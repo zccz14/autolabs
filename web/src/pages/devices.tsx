@@ -219,12 +219,12 @@ export function DevicesPage() {
               <Input
                 value={addressInput}
                 onChange={(event) => setAddressInput(event.target.value)}
-                placeholder="5z1jmL9zy3yyJPfW1TKsSSX3rh6Ysg2ydnchifBWEiHg"
+                placeholder={t('devices.addressPlaceholder')}
                 className="font-mono text-xs"
               />
             </Field>
             <Field label={t('label.name')}>
-              <Input value={labelInput} onChange={(event) => setLabelInput(event.target.value)} placeholder="MacMini" />
+              <Input value={labelInput} onChange={(event) => setLabelInput(event.target.value)} placeholder={t('devices.labelPlaceholder')} />
             </Field>
             <Button size="sm" disabled={busy || !identity || addressInput.trim().length === 0} onClick={submitDevice}>
               <PlusIcon />

@@ -150,6 +150,11 @@ export const COPY = {
   },
   'devices.deviceAddress': { zh: '设备地址', en: 'Device address' },
   'devices.add': { zh: '接入并探活', en: 'Connect and probe' },
+  'devices.addressPlaceholder': {
+    zh: '在那台机器上跑 exe status，复制 address 那一行',
+    en: 'Run exe status on that machine and copy the address line',
+  },
+  'devices.labelPlaceholder': { zh: '例如 MacMini', en: 'e.g. MacMini' },
   'devices.probe': { zh: '探活', en: 'Probe' },
   'devices.remove': { zh: '移除', en: 'Remove' },
   'devices.empty': { zh: '还没有接入任何设备。', en: 'No device connected yet.' },
