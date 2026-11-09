@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEvalCommand, parseMetrics, shellQuote } from '../src/evaluation';
+import { buildEvalCommand, judgeEvaluation, parseMetrics, shellQuote } from '../src/evaluation';
 
 const command = {
   origin: 'https://autolabs.ntnl.io',
@@ -48,5 +48,55 @@ describe('评估命令的契约', () => {
 
   it('只有 metrics 不是对象的那一行，不算数', () => {
     expect(() => parseMetrics('{"metrics":[1,2,3]}')).toThrow(/评估器没有给出指标/);
+  });
+});
+
+const definitions = [
+  { key: 'sharpe', version: 2, required: true },
+  { key: 'trades', version: 1, required: false },
+];
+
+describe('一次评估怎么结算', () => {
+  it('指标齐了、自测也过了，就进榜单', () => {
+    const judged = judgeEvaluation(definitions, { sharpe: 1.93, trades: 12 }, [
+      { rule_id: 'no-future-leak', pass: true, evidence: '审查过' },
+    ]);
+    expect(judged.state).toBe('frozen');
+    expect(judged.metricSet).toEqual([
+      { key: 'sharpe', version: 2 },
+      { key: 'trades', version: 1 },
+    ]);
+    expect(judged.gates.find((gate) => gate.rule_id === 'metrics-reported')?.pass).toBe(true);
+  });
+
+  it('必报的没报全：口径之内但缺项，不算过', () => {
+    const judged = judgeEvaluation(definitions, { trades: 12 }, []);
+    expect(judged.state).toBe('rejected');
+    expect(judged.missing).toEqual(['sharpe']);
+    expect(judged.gates.find((gate) => gate.rule_id === 'metrics-reported')?.evidence).toContain('sharpe');
+  });
+
+  it('报了项目没定义的 key：口径被污染，点名拒掉', () => {
+    const judged = judgeEvaluation(definitions, { sharpe: 1.93, win_rate: 0.5 }, []);
+    expect(judged.state).toBe('rejected');
+    expect(judged.unknown).toEqual(['win_rate']);
+    expect(judged.gates.some((gate) => gate.evidence?.includes('win_rate'))).toBe(true);
+  });
+
+  it('自测有一条没过，指标再全也进不了榜单', () => {
+    const judged = judgeEvaluation(definitions, { sharpe: 1.93 }, [
+      { rule_id: 'canonical-byte-equal', pass: false, evidence: '两份 canonical 不一致' },
+    ]);
+    expect(judged.state).toBe('rejected');
+  });
+
+  it('自测里自带一条 metrics-reported 也压不过平台那一条', () => {
+    const judged = judgeEvaluation(definitions, { trades: 1 }, [
+      { rule_id: 'metrics-reported', pass: true, evidence: '我说过了' },
+    ]);
+    const gates = judged.gates.filter((gate) => gate.rule_id === 'metrics-reported');
+    expect(gates).toHaveLength(1);
+    expect(gates[0]!.pass).toBe(false);
+    expect(judged.state).toBe('rejected');
   });
 });

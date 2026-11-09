@@ -36,6 +36,67 @@ export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+export interface GateRecord {
+  rule_id: string;
+  pass: boolean;
+  evidence: string | null;
+}
+
+export interface EvaluationJudgement {
+  state: 'frozen' | 'rejected';
+  gates: GateRecord[];
+  missing: string[];
+  unknown: string[];
+  metricSet: { key: string; version: number }[];
+}
+
+/**
+ * 一次评估该怎么结算：这是整条链路里唯一一次「判」，所以单独做成纯函数。
+ *
+ * 两条拒绝的理由不一样，别混成一句：
+ *   - 报了项目没定义的 key：口径被污染，这一轮不能进地图；
+ *   - 必报的没报全：口径之内但缺项，同样不算过。
+ * 自测门禁原样带上——那是执行体自己跑过的证据，平台不替它重跑。
+ */
+export function judgeEvaluation(
+  definitions: { key: string; version: number; required?: boolean | number }[],
+  reported: Record<string, unknown>,
+  selfGates: GateRecord[],
+): EvaluationJudgement {
+  const { metricSet, unknown } = matchMetrics(definitions, reported);
+  if (definitions.length > 0 && unknown.length > 0) {
+    return {
+      state: 'rejected',
+      gates: [
+        ...selfGates,
+        { rule_id: 'evaluation', pass: false, evidence: `评估器报了项目没定义的指标：${unknown.join(', ')}` },
+      ],
+      missing: [],
+      unknown,
+      metricSet,
+    };
+  }
+  const missing = missingRequiredMetrics(definitions, reported);
+  const gates: GateRecord[] = [
+    ...selfGates.filter((gate) => gate.rule_id !== 'metrics-reported'),
+    {
+      rule_id: 'metrics-reported',
+      pass: missing.length === 0,
+      evidence:
+        missing.length === 0
+          ? `评估器产出了全部 ${definitions.filter((definition) => definition.required).length} 个必报指标`
+          : `评估器没有产出：${missing.join(', ')}`,
+    },
+  ];
+  return {
+    state: gates.every((gate) => gate.pass) ? 'frozen' : 'rejected',
+    gates,
+    missing,
+    unknown,
+    metricSet,
+  };
+}
+
 export interface EvalCommandInput {
   origin: string;
   projectSlug: string;
@@ -226,41 +287,26 @@ export async function collectEvaluation(env: Env, project: ProjectRow, run: RunR
   }
 
   const definitions = await currentMetrics(env, project.id);
-  const { metricSet, unknown } = matchMetrics(definitions, reported);
-  if (definitions.length > 0 && unknown.length > 0) {
-    await settleRejected(env, project, run, `评估器报了项目没定义的指标：${unknown.join(', ')}`);
-    return;
-  }
-  const missing = missingRequiredMetrics(definitions, reported);
-  const gates = [
-    ...((run.gates_json ? (JSON.parse(run.gates_json) as { rule_id: string; pass: boolean; evidence: string | null }[]) : [])),
-    {
-      rule_id: 'metrics-reported',
-      pass: missing.length === 0,
-      evidence:
-        missing.length === 0
-          ? `评估器产出了全部 ${definitions.filter((definition) => definition.required).length} 个必报指标`
-          : `评估器没有产出：${missing.join(', ')}`,
-    },
-  ];
-  const allPass = gates.every((gate) => gate.pass);
+  const selfGates = run.gates_json ? (JSON.parse(run.gates_json) as GateRecord[]) : [];
+  const judgement = judgeEvaluation(definitions, reported, selfGates);
   const settledAt = nowSeconds();
   await env.DB.prepare(
     `UPDATE runs SET state = ?, gates_json = ?, metrics_json = ?, metric_set_json = ?, settled_at = ?, eval_error = NULL WHERE id = ?`,
   )
     .bind(
-      allPass ? 'frozen' : 'rejected',
-      JSON.stringify(gates),
+      judgement.state,
+      JSON.stringify(judgement.gates),
       JSON.stringify(reported),
-      JSON.stringify(metricSet),
+      JSON.stringify(judgement.metricSet),
       settledAt,
       run.id,
     )
     .run();
   await recordEvent(env, EVAL_EVENTS.settled, project.id, null, {
     run_id: run.id,
-    state: allPass ? 'frozen' : 'rejected',
-    missing,
+    state: judgement.state,
+    missing: judgement.missing,
+    unknown: judgement.unknown,
   });
 }
 

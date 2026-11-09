@@ -333,6 +333,9 @@ runRoutes.post('/:runId/dispatch', async (c) => {
  */
 runRoutes.post('/:runId/implemented', async (c) => {
   const { run, access, principal } = await accessRun(c.env, c.req.raw, c.req.param('runId'), 'runner');
+  if (['frozen', 'rejected', 'lost'].includes(run.state)) {
+    return fail(409, 'already_settled', '这一轮已经结算了：要重跑就开新一轮，历史行不覆盖');
+  }
   const payload = await readJson<Record<string, unknown>>(c);
   if (payload.metrics !== undefined) {
     return fail(
