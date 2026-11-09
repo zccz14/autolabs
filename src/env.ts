@@ -17,6 +17,8 @@ export interface Env {
   CYBION_API_KEY?: string;
   /** 密封 cybion_credentials.sealed 的 AES-GCM 密钥（32 字节 base64），只在 Worker secret 里。 */
   CREDENTIALS_KEY?: string;
+  /** eXe（执行面）的基地址；评估命令派到这里，由设备执行。 */
+  EXE_BASE_URL?: string;
   /** 仅本地开发：把 identity 固定成这个用户，生产环境永远不设置。 */
   DEV_USER_ID?: string;
 }

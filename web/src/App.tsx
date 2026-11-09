@@ -1,4 +1,4 @@
-import { FlaskConicalIcon, InfoIcon } from 'lucide-react';
+import { FlaskConicalIcon, InfoIcon, ServerIcon } from 'lucide-react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@zccz14/ux';
 import { useAuthMini } from 'auth-mini-react-components';
@@ -8,6 +8,7 @@ import { ProjectsPage } from './pages/projects';
 import { ProjectPage } from './pages/project';
 import { RunPage } from './pages/run';
 import { AboutPage } from './pages/about';
+import { DevicesPage } from './pages/devices';
 
 export function App() {
   const t = useCopy();
@@ -54,6 +55,7 @@ export function App() {
           label: t('nav.workbench'),
           items: [
             { to: '/', label: t('nav.projects'), icon: <FlaskConicalIcon /> },
+            { to: '/devices', label: t('nav.devices'), icon: <ServerIcon /> },
             { to: '/about', label: t('nav.about'), icon: <InfoIcon /> },
           ],
         },
@@ -63,6 +65,7 @@ export function App() {
         <Route path="/" element={<ProjectsPage />} />
         <Route path="/p/:slug" element={<ProjectPage />} />
         <Route path="/runs/:runId" element={<RunPage />} />
+        <Route path="/devices" element={<DevicesPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
