@@ -31,6 +31,10 @@ export interface ProjectRow {
   loop_paused_at: number | null;
   loop_last_tick_at: number | null;
   loop_error: string | null;
+  /** 评估入口：一条命令，最后一行打印 {"metrics": {...}}。空表示还没配。 */
+  eval_command: string | null;
+  /** 评估跑在哪台设备上（devices.id）。空表示还没选。 */
+  eval_device_id: string | null;
 }
 
 export interface SnapshotRow {
@@ -72,6 +76,13 @@ export interface RunRow {
   created_by: string;
   created_at: number;
   settled_at: number | null;
+  /** 这一次评估派给谁了：调用 id 与设备地址是解结果信封要用的绑定信息。 */
+  eval_call_id: string | null;
+  eval_device_address: string | null;
+  eval_expires_at: number | null;
+  eval_dispatched_at: number | null;
+  eval_attempts: number;
+  eval_error: string | null;
 }
 
 const ROLE_RANK: Record<Role, number> = { reader: 1, runner: 2, maintainer: 3, owner: 4 };

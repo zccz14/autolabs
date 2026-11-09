@@ -19,6 +19,8 @@ import {
   useLoopControl,
   useProject,
   useProjectIdea,
+  useDevices,
+  useSaveProjectSettings,
   useSaveRunModel,
   useStartIdea,
   type SdkLike,
@@ -183,6 +185,14 @@ export function ProjectPage() {
         <span className="text-xs text-muted-foreground">实验模型</span>
         <RunModelSetting sdk={typed} slug={slug} current={project?.run_model ?? ''} onSaved={() => detail.refetch()} />
       </div>
+
+      <EvaluationSetting
+        sdk={typed}
+        slug={slug}
+        currentCommand={project?.eval_command ?? ''}
+        currentDevice={project?.eval_device_id ?? ''}
+        onSaved={() => detail.refetch()}
+      />
 
       {loopRun || project?.loop_error ? (
         <p className={`text-xs ${project?.loop_error ? 'text-destructive' : 'text-muted-foreground'}`}>
@@ -571,5 +581,88 @@ function RunModelSetting({
       </Button>
       <ErrorNote error={save.error} />
     </>
+  );
+}
+
+/**
+ * 评估入口：这一轮的数字由哪条命令、在哪台机器上算出来。
+ *
+ * 它不是「可选优化」：没有它，实验做完了也结算不了，研究循环也不会启动。
+ * 所以这块该显眼地摆着，而不是藏在某个抽屉里。
+ */
+function EvaluationSetting({
+  sdk,
+  slug,
+  currentCommand,
+  currentDevice,
+  onSaved,
+}: {
+  sdk: SdkLike | null;
+  slug: string;
+  currentCommand: string;
+  currentDevice: string;
+  onSaved: () => void;
+}) {
+  const t = useCopy();
+  const save = useSaveProjectSettings(sdk, slug);
+  const devices = useDevices(sdk);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [device, setDevice] = useState<string | null>(null);
+
+  const shown = draft ?? currentCommand;
+  const shownDevice = device ?? currentDevice;
+  const list = devices.data?.devices ?? [];
+  const dirty = shown !== currentCommand || shownDevice !== currentDevice;
+
+  return (
+    <Section title={t('project.evalTitle')} description={t('project.evalHint')}>
+      <div className="flex flex-col gap-3">
+        <Field label={t('project.evalCommand')}>
+          <Textarea
+            className="min-h-24 font-mono text-xs"
+            value={shown}
+            placeholder="python -m harness.evaluate"
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </Field>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">{t('project.evalDevice')}</span>
+          {list.length === 0 ? (
+            <span className="text-xs text-destructive">{t('project.evalDeviceNone')}</span>
+          ) : (
+            list.map((item) => (
+              <Button
+                key={item.id}
+                size="sm"
+                variant={shownDevice === item.id ? 'default' : 'outline'}
+                onClick={() => setDevice(item.id)}
+              >
+                {item.label}
+              </Button>
+            ))
+          )}
+        </div>
+        <div>
+          <Button
+            size="sm"
+            disabled={!dirty || save.isPending}
+            onClick={() =>
+              save.mutate(
+                { eval_command: shown, eval_device_id: shownDevice },
+                {
+                  onSuccess: () => {
+                    setDraft(null);
+                    setDevice(null);
+                    onSaved();
+                  },
+                },
+              )
+            }
+          >
+            {t('action.save')}
+          </Button>
+        </div>
+      </div>
+    </Section>
   );
 }

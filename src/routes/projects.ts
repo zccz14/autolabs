@@ -43,6 +43,8 @@ function viewProject(access: Access, extra: Record<string, unknown> = {}) {
     loop_state: project.loop_state,
     loop_run_id: project.loop_run_id,
     loop_error: project.loop_error,
+    eval_command: project.eval_command,
+    eval_device_id: project.eval_device_id,
     loop_started_at: project.loop_started_at,
     loop_paused_at: project.loop_paused_at,
     loop_last_tick_at: project.loop_last_tick_at,
@@ -74,6 +76,15 @@ export function viewRun(run: RunRow) {
     created_by: run.created_by,
     created_at: run.created_at,
     settled_at: run.settled_at,
+    /** 指标由评估器算：这几列说的是「派给谁了、还在等吗、上一次为什么没成」。 */
+    eval: {
+      call_id: run.eval_call_id,
+      device_address: run.eval_device_address,
+      dispatched_at: run.eval_dispatched_at,
+      expires_at: run.eval_expires_at,
+      attempts: run.eval_attempts,
+      error: run.eval_error,
+    },
   };
 }
 
@@ -178,14 +189,59 @@ routes.post('/:slug/tokens', async (c) => {
 });
 
 /** 项目级设置：现在只有「跑实验用哪个模型」，空字符串表示跟随 Cybion 默认。 */
+/**
+ * 项目级设置。三样东西各管一段：
+ *   run_model      —— 跑实验的 Thread 用哪个模型（执行体的事）；
+ *   eval_command   —— 指标怎么算（评估器的事，一条命令）；
+ *   eval_device_id —— 这条命令在哪台机器上跑（用户自己的设备）。
+ * 这些都是「只传什么改什么」：界面保存一块，不该顺手把别的块清零。
+ */
 routes.post('/:slug/settings', async (c) => {
   const principal = await authenticate(c.req.raw, c.env);
   const access = await loadProject(c.env, c.req.param('slug'), principal, 'maintainer', 'write');
   const payload = await readJson<Record<string, unknown>>(c);
-  const raw = optionalString(payload.run_model, 'run_model', 120)?.trim() ?? '';
-  await c.env.DB.prepare(`UPDATE projects SET run_model = ? WHERE id = ?`).bind(raw || null, access.project.id).run();
-  await recordEvent(c.env, 'project.settings', access.project.id, principal.userId, { run_model: raw || null });
-  return c.json({ run_model: raw || null });
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  const event: Record<string, unknown> = {};
+
+  if ('run_model' in payload) {
+    const raw = optionalString(payload.run_model, 'run_model', 120)?.trim() ?? '';
+    sets.push('run_model = ?');
+    binds.push(raw || null);
+    event.run_model = raw || null;
+  }
+
+  if ('eval_command' in payload) {
+    const raw = optionalString(payload.eval_command, 'eval_command', 2000)?.trim() ?? '';
+    sets.push('eval_command = ?');
+    binds.push(raw || null);
+    event.eval_command = raw ? raw.slice(0, 120) : null;
+  }
+
+  if ('eval_device_id' in payload) {
+    const raw = optionalString(payload.eval_device_id, 'eval_device_id', 64)?.trim() ?? '';
+    if (raw) {
+      const device = await c.env.DB.prepare(`SELECT id FROM devices WHERE id = ? AND user_id = ?`)
+        .bind(raw, access.project.owner_user_id)
+        .first<{ id: string }>();
+      if (!device) return fail(400, 'unknown_device', '这台设备不在项目所有者名下：先去设备页接入');
+    }
+    sets.push('eval_device_id = ?');
+    binds.push(raw || null);
+    event.eval_device_id = raw || null;
+  }
+
+  if (sets.length === 0) return fail(400, 'nothing_to_update', '没有要改的设置');
+  await c.env.DB.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...binds, access.project.id)
+    .run();
+  await recordEvent(c.env, 'project.settings', access.project.id, principal.userId, event);
+  const updated = await findProjectBySlug(c.env, access.project.slug);
+  return c.json({
+    run_model: updated?.run_model ?? null,
+    eval_command: updated?.eval_command ?? null,
+    eval_device_id: updated?.eval_device_id ?? null,
+  });
 });
 
 routes.get('/:slug/tokens', async (c) => {

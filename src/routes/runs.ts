@@ -17,7 +17,6 @@ import {
   snapshotEntries,
   type RunRow,
 } from '../store';
-import { matchMetrics, missingRequiredMetrics } from '../metrics';
 import { createThread, sendInput } from '../cybion';
 import { callerOf, withCybionKey, type Caller } from '../credentials';
 import { buildRunBrief, withExclusion } from '../runs';
@@ -325,11 +324,25 @@ runRoutes.post('/:runId/dispatch', async (c) => {
  * 上报结论。门禁由平台记录并判定：全通过才 frozen，否则 rejected。
  * 机器可以上报 metrics/report/output_files，但不能自己宣布通过。
  */
-runRoutes.post('/:runId/verdict', async (c) => {
+/**
+ * 实验做完了。这是执行体能说的最后一件事：把实验实现出来、跑通冒烟、自己过一遍门禁，
+ * 然后交棒。**指标不在这里**——它由评估器在用户自己的机器上算出来，见 src/evaluation.ts。
+ *
+ * 交棒之后这一轮进 evaluating：等一条命令把数字算出来，等不到就按次数记账，
+ * 够次数了记成 rejected，不留一个永远挂着的行。
+ */
+runRoutes.post('/:runId/implemented', async (c) => {
   const { run, access, principal } = await accessRun(c.env, c.req.raw, c.req.param('runId'), 'runner');
   const payload = await readJson<Record<string, unknown>>(c);
+  if (payload.metrics !== undefined) {
+    return fail(
+      400,
+      'metrics_not_accepted',
+      '指标不由执行体上报：做完了就报「实现完成」，数字由评估器算。这一轮会进 evaluating 等评估结果。',
+    );
+  }
   const gates = Array.isArray(payload.gates) ? payload.gates : [];
-  if (gates.length === 0) return fail(400, 'missing_gates', '至少需要一条门禁记录');
+  if (gates.length === 0) return fail(400, 'missing_gates', '至少需要一条门禁自测记录');
   const normalized = gates.map((gate, index) => {
     const record = (gate ?? {}) as Record<string, unknown>;
     const ruleId = typeof record.rule_id === 'string' && record.rule_id ? record.rule_id : `gate-${index + 1}`;
@@ -339,41 +352,9 @@ runRoutes.post('/:runId/verdict', async (c) => {
       evidence: typeof record.evidence === 'string' ? record.evidence : null,
     };
   });
-  const definitions = await currentMetrics(c.env, access.project.id);
-  const reportedMetrics =
-    payload.metrics && typeof payload.metrics === 'object' && !Array.isArray(payload.metrics)
-      ? (payload.metrics as Record<string, unknown>)
-      : null;
-  const { metricSet, unknown } = matchMetrics(definitions, reportedMetrics);
-  if (definitions.length > 0 && unknown.length > 0) {
-    return fail(
-      400,
-      'unknown_metric',
-      `项目没有定义这些指标：${unknown.join(', ')}。先在项目的「指标」里定义口径，再上报。`,
-    );
-  }
-  // 必报指标由平台判定：机器可以自称全过，但少了指标就是没通过。
-  // 这条门禁的平台版本总是覆盖客户端上报的同名门禁，避免被自带 pass=true 骗过。
-  const requiredDefinitions = definitions.filter((definition) => definition.required);
-  const missingMetrics = missingRequiredMetrics(definitions, reportedMetrics);
-  const withMetricGate = [
-    ...normalized.filter((gate) => gate.rule_id !== 'metrics-reported'),
-    {
-      rule_id: 'metrics-reported',
-      pass: missingMetrics.length === 0,
-      evidence:
-        missingMetrics.length === 0
-          ? `已上报全部 ${requiredDefinitions.length} 个必报指标`
-          : `缺必报指标：${missingMetrics.join(', ')}`,
-    },
-  ];
   const report = optionalString(payload.report_md, 'report_md', 200000) ?? null;
-  // 思路可以在 verdict 时补写，但不能覆盖已经写下的那一条。
+  // 思路可以在这时补写，但不能覆盖已经写下的那一条。
   const idea = optionalString(payload.idea_md, 'idea_md', 20000) ?? run.idea_md;
-  const metrics = payload.metrics ?? null;
-  if (metrics !== null && (typeof metrics !== 'object' || Array.isArray(metrics))) {
-    return fail(400, 'invalid_metrics', 'metrics 必须是对象');
-  }
   const outputFiles = payload.output_files;
   let outputSnapshotId: string | null = run.output_snapshot_id;
   if (outputFiles && typeof outputFiles === 'object' && !Array.isArray(outputFiles)) {
@@ -413,26 +394,17 @@ runRoutes.post('/:runId/verdict', async (c) => {
       outputSnapshotId = snapshotId;
     }
   }
-  const allPass = withMetricGate.every((gate) => gate.pass);
-  const state = allPass ? 'frozen' : 'rejected';
+  // 自测门禁全过才算「实现完成」；有一条没过就是这一轮实验本身不成立，直接 rejected。
+  const allPass = normalized.every((gate) => gate.pass);
+  const state = allPass ? 'evaluating' : 'rejected';
   await c.env.DB.prepare(
-    `UPDATE runs SET state = ?, gates_json = ?, metrics_json = ?, metric_set_json = ?, report_md = ?, idea_md = ?, output_snapshot_id = ?, settled_at = ? WHERE id = ?`,
+    `UPDATE runs SET state = ?, gates_json = ?, report_md = ?, idea_md = ?, output_snapshot_id = ?, eval_error = ?, settled_at = ? WHERE id = ?`,
   )
-    .bind(
-      state,
-      JSON.stringify(withMetricGate),
-      metrics === null ? null : JSON.stringify(metrics),
-      JSON.stringify(metricSet),
-      report,
-      idea,
-      outputSnapshotId,
-      nowSeconds(),
-      run.id,
-    )
+    .bind(state, JSON.stringify(normalized), report, idea, outputSnapshotId, allPass ? null : null, allPass ? null : nowSeconds(), run.id)
     .run();
   await recordEvent(c.env, `run.${state}`, access.project.id, principal?.userId ?? null, {
     run_id: run.id,
-    gates: withMetricGate.map((gate) => ({ rule_id: gate.rule_id, pass: gate.pass })),
+    gates: normalized.map((gate) => ({ rule_id: gate.rule_id, pass: gate.pass })),
   });
   const updated = await findRun(c.env, run.id);
   const outputEntries = outputSnapshotId ? await snapshotEntries(c.env, outputSnapshotId) : [];

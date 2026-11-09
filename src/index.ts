@@ -7,10 +7,12 @@ import { projectSnapshotRoutes, snapshotRoutes } from './routes/snapshots';
 import { projectRunRoutes, runRoutes } from './routes/runs';
 import { firmamentRoutes, projectMetricRoutes } from './routes/metrics';
 import { driveProjectLoop } from './loop-runner';
-import type { ProjectRow } from './store';
+import { nowSeconds } from './ids';
+import { findProjectById, type ProjectRow, type RunRow } from './store';
 import { projectIdeaRoutes } from './routes/ideas';
 import { projectLoopRoutes } from './routes/loop';
 import { deviceRoutes } from './routes/devices';
+import { collectEvaluation, dispatchEvaluation } from './evaluation';
 
 type Variables = { principal: Principal };
 
@@ -67,12 +69,12 @@ async function reconcile(env: Env): Promise<void> {
   // 但一直不结算就是丢了：30 天后标记 lost，研究地图上不再假装它还在跑。
   const staleBefore = Math.floor(Date.now() / 1000) - 30 * 86400;
   const stuck = await env.DB.prepare(
-    `SELECT id FROM runs WHERE state = 'dispatched' AND created_at < ?`,
+    `SELECT id FROM runs WHERE state IN ('dispatched', 'evaluating') AND created_at < ?`,
   )
     .bind(staleBefore)
     .all<{ id: string }>();
   for (const run of stuck.results ?? []) {
-    await env.DB.prepare(`UPDATE runs SET state = 'lost', settled_at = ? WHERE id = ? AND state = 'dispatched'`)
+    await env.DB.prepare(`UPDATE runs SET state = 'lost', settled_at = ? WHERE id = ? AND state IN ('dispatched', 'evaluating')`)
       .bind(Math.floor(Date.now() / 1000), run.id)
       .run();
   }
@@ -92,10 +94,45 @@ async function driveLoops(env: Env): Promise<void> {
   }
 }
 
+/**
+ * 评估的心跳：派出去、收回来。
+ *
+ * 和 driveLoops 一样，每一拍都从库里重新判断：这一轮是「还没派」还是「派出去了等回音」，
+ * 全看 run 上那几列。失败有冷却，成功的下一步由结果决定，所以重复执行安全。
+ */
+async function driveEvaluations(env: Env): Promise<void> {
+  const rows = (
+    await env.DB.prepare(`SELECT * FROM runs WHERE state = 'evaluating' ORDER BY created_at ASC LIMIT 50`).all<RunRow>()
+  ).results ?? [];
+  if (rows.length === 0) return;
+  const projects = new Map<string, ProjectRow>();
+  for (const run of rows) {
+    let project = projects.get(run.project_id);
+    if (!project) {
+      const found = await findProjectById(env, run.project_id);
+      if (!found) continue;
+      project = found;
+      projects.set(run.project_id, project);
+    }
+    try {
+      if (run.eval_call_id) {
+        await collectEvaluation(env, project, run);
+        continue;
+      }
+      // 派不出去时别每一拍都重来一遍：冷却期内安静等着，让日志里只留一次原因。
+      if (run.eval_error && run.eval_attempts > 0 && run.eval_dispatched_at && nowSeconds() - run.eval_dispatched_at < 300) continue;
+      await dispatchEvaluation(env, project, run);
+    } catch (error) {
+      console.error('evaluation.failed', run.id, (error as Error).message);
+    }
+  }
+}
+
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(reconcile(env));
     ctx.waitUntil(driveLoops(env));
+    ctx.waitUntil(driveEvaluations(env));
   },
 } satisfies ExportedHandler<Env>;

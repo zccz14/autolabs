@@ -66,6 +66,10 @@ export interface ProjectSummary {
   role: string;
   /** 跑实验的 Thread 用哪个模型；空表示跟随 Cybion 默认。 */
   run_model?: string | null;
+  /** 算指标的评估入口：一条命令，最后一行打印 {"metrics": {...}}。 */
+  eval_command?: string | null;
+  /** 评估跑在哪台设备上（devices.id）。 */
+  eval_device_id?: string | null;
   /** 研究循环：running 就一直推进，paused 就不开新实验。 */
   loop_state?: 'running' | 'paused';
   loop_run_id?: string | null;
@@ -139,6 +143,15 @@ export interface RunView {
   gates: { rule_id: string; pass: boolean; evidence: string | null }[];
   created_at: number;
   settled_at: number | null;
+  /** 指标由评估器算：这里说的是「派给谁了、还在等吗、上一次为什么没成」。 */
+  eval?: {
+    call_id: string | null;
+    device_address: string | null;
+    dispatched_at: number | null;
+    expires_at: number | null;
+    attempts: number;
+    error: string | null;
+  };
 }
 
 export interface SnapshotView {
@@ -276,10 +289,10 @@ export function useDispatchRun(sdk: SdkLike | null) {
   });
 }
 
-export function useVerdict(sdk: SdkLike | null) {
+export function useImplemented(sdk: SdkLike | null) {
   return useMutation({
     mutationFn: (input: { runId: string; payload: unknown }) =>
-      api<{ run: RunView }>(sdk as SdkLike, `/api/v1/runs/${input.runId}/verdict`, {
+      api<{ run: RunView }>(sdk as SdkLike, `/api/v1/runs/${input.runId}/implemented`, {
         method: 'POST',
         body: JSON.stringify(input.payload),
       }),
@@ -504,5 +517,17 @@ export function useProbeDevice(sdk: SdkLike | null) {
 export function useDeleteDevice(sdk: SdkLike | null) {
   return useMutation({
     mutationFn: (id: string) => api<{ ok: boolean }>(sdk as SdkLike, `/api/v1/devices/${id}`, { method: 'DELETE' }),
+  });
+}
+
+/** 项目级设置：只传要改的那一块，别顺手把别的块清零。 */
+export function useSaveProjectSettings(sdk: SdkLike | null, slug: string | undefined) {
+  return useMutation({
+    mutationFn: (patch: { run_model?: string; eval_command?: string; eval_device_id?: string }) =>
+      api<{ run_model: string | null; eval_command: string | null; eval_device_id: string | null }>(
+        sdk as SdkLike,
+        `/api/v1/projects/${slug}/settings`,
+        { method: 'POST', body: JSON.stringify(patch) },
+      ),
   });
 }

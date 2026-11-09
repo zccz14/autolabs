@@ -16,16 +16,24 @@ import { nowSeconds } from './ids';
  */
 export async function driveProjectLoop(env: Env, project: ProjectRow): Promise<void> {
   if (project.loop_state !== 'running') return;
+  // 循环要自己推进，就得自己算得出指标。没有评估入口，开了实验也结算不了，
+  // 与其每分钟空转，不如现在就说清楚缺什么。
+  if (!project.eval_command?.trim()) {
+    await pauseWithError(env, project.id, '还没有配置评估入口：在研究循环里，指标由一条评估命令算出来。在项目设置里补上再启动。');
+    return;
+  }
   const origin = env.APP_ORIGIN ?? 'https://autolabs.ntnl.io';
   const actor = project.idea_thread_user_id ?? project.owner_user_id;
   // 后台没有登录 JWT：用这个人存过的凭据，没有就回退服务级 key。
   const caller: Caller = { userId: actor, jwt: null };
 
-  // 「在飞」= 已经发出去、正在跑；proposed 只有在已经建了 Thread（发到一半）时才算。
+  // 「在飞」= 已经发出去、正在跑，或者跑完了正等着算指标；proposed 只有在已经建了
+  // Thread（发到一半）时才算。evaluating 也算在飞：地图上这一行还没结算，
+  // 这时候就出下一版思路，等于让思路去看一张缺了最后一行的地图。
   // 光登记没发出去的旧 run 不该把整条研究线卡死——它什么都没在跑。
   const inFlight = await env.DB.prepare(
     `SELECT id FROM runs WHERE project_id = ?
-       AND (state IN ('dispatched', 'running') OR (state = 'proposed' AND cybion_thread_id IS NOT NULL))
+       AND (state IN ('dispatched', 'running', 'evaluating') OR (state = 'proposed' AND cybion_thread_id IS NOT NULL))
      ORDER BY lab_no DESC LIMIT 1`,
   )
     .bind(project.id)

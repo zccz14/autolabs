@@ -51,7 +51,10 @@ describe('发给 Thread 的第一条输入', () => {
     expect(brief).toContain('lab-0083');
     expect(brief).toContain('把信号窗口从 5 日拉到 20 日');
     expect(brief).toContain('https://autolabs.ntnl.io/api/v1/snapshots/snp_1/manifest');
-    expect(brief).toContain('https://autolabs.ntnl.io/api/v1/runs/run_abc/verdict');
+    expect(brief).toContain('https://autolabs.ntnl.io/api/v1/runs/run_abc/implemented');
+    // 指标不由执行体报：简报要明说这一点，别让它以为漏了一件事。
+    expect(brief).toContain('不要报');
+    expect(brief).not.toContain('"metrics": { "…": 0 }');
     // 简报里不再有长期凭据：令牌要它自己现签。
     expect(brief).toContain('create_thread_token');
     expect(brief).toContain('Authorization: Bearer <create_thread_token 返回的 token>');

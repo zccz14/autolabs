@@ -23,9 +23,9 @@ project_metrics
 四条规则：
 
 1. **只追加，不覆盖。** 改一次口径 = 新版本。旧版本留在表里，历史 run 引用的是它当时那一版。
-2. **上报必须对得上。** `POST /runs/{id}/verdict` 里的 `metrics` 键必须在项目已定义的指标集内，多出来的（比如随手加个 `win_rate`）直接 400 拒绝——否则榜单会被各写各的指标污染。
+2. **产出必须对得上。** 指标由项目的评估入口产出（见 ADR 0010），`key` 必须在项目已定义的指标集内，多出来的（比如随手加个 `win_rate`）整轮直接 `rejected`——否则榜单会被各写各的指标污染。执行体自己不报指标：`POST /runs/{id}/implemented` 里带 `metrics` 会被 400 拒掉。
 3. **run 记住自己用的哪一版。** `runs.metric_set_json` 存 `[{key, version}]`，所以"这个数字是在哪版口径下算出来的"是一个外键，不是一段回忆。
-4. **必报指标由平台判。** 每次 verdict，平台补一条 `metrics-reported` 门禁：项目里标了 `required` 的指标缺一个（或不是有限数字）就 `pass=false`，run 只能落 `rejected`。同名门禁如果由机器上报，会被平台版本覆盖——门禁可以自报，判定不行。
+4. **必报指标由平台判。** 评估器交回数字之后，平台补一条 `metrics-reported` 门禁：项目里标了 `required` 的指标缺一个（或不是有限数字）就 `pass=false`，run 只能落 `rejected`。自测门禁可以自报，数字的判定不行。
 
 新建项目会种入一份模板（累计收益率 / 年化收益率 / 最大回撤 / 日收益夏普 / 交易数 / 平均每日交易），六条默认都是**必报**；口径抄自 `Q-Labs` 的 `AGENTS.md`，可以按项目改成自己的。
 
@@ -69,7 +69,7 @@ dataset_pins
 
 数据本身不复制进 AutoLabs：跑实验的机器该 `firmament sync` 还是 `firmament export`，AutoLabs 只负责证明"我这一轮用的是哪份 manifest"。
 
-## 三、一次 verdict 的完整证据链
+## 三、一次结算的完整证据链
 
 ```
 run
