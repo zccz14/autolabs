@@ -8,7 +8,12 @@ import type { Env } from './env';
  * 也解不开。附加数据固定成一条用途串，密文搬去别处也用不了。
  */
 
-const AAD = new TextEncoder().encode('autolabs:cybion-credential:v1');
+/** 用途串：同一把密钥下，密文被搬去别的用途就解不开。 */
+function aadFor(purpose: string): Uint8Array {
+  return new TextEncoder().encode(`autolabs:${purpose}:v1`);
+}
+
+const DEFAULT_PURPOSE = 'cybion-credential';
 
 function keyBytes(env: Env): Uint8Array {
   const raw = env.CREDENTIALS_KEY;
@@ -35,16 +40,16 @@ function fromBase64(value: string): Uint8Array {
   return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 }
 
-export async function seal(env: Env, plaintext: string): Promise<string> {
+export async function seal(env: Env, plaintext: string, purpose = DEFAULT_PURPOSE): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const sealed = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: AAD }, await aesKey(env), new TextEncoder().encode(plaintext));
+  const sealed = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aadFor(purpose) }, await aesKey(env), new TextEncoder().encode(plaintext));
   return toBase64(new Uint8Array([...iv, ...new Uint8Array(sealed)]));
 }
 
-export async function unseal(env: Env, value: string): Promise<string> {
+export async function unseal(env: Env, value: string, purpose = DEFAULT_PURPOSE): Promise<string> {
   const bytes = fromBase64(value);
   const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: bytes.slice(0, 12), additionalData: AAD },
+    { name: 'AES-GCM', iv: bytes.slice(0, 12), additionalData: aadFor(purpose) },
     await aesKey(env),
     bytes.slice(12),
   );

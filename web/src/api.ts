@@ -431,3 +431,78 @@ export function useSaveRunModel(sdk: SdkLike | null, slug: string | undefined) {
       }),
   });
 }
+
+/** 每用户一把 eXe 身份：把它加进设备的 trust，AutoLabs 才能在那台机器上干活。 */
+export interface DeviceIdentity {
+  address: string;
+  created_at: number;
+}
+
+export interface DeviceView {
+  id: string;
+  address: string;
+  label: string;
+  platform: string | null;
+  last_seen_at: number | null;
+  probe_at: number | null;
+  probe_ok: boolean | null;
+  probe_error: string | null;
+  created_at: number;
+}
+
+export interface DeviceProbe {
+  ok: boolean;
+  reason: string;
+  message: string;
+}
+
+export interface DevicesResponse {
+  identity: DeviceIdentity | null;
+  devices: DeviceView[];
+}
+
+export function useDevices(sdk: SdkLike | null) {
+  return useQuery({
+    queryKey: ['devices'],
+    enabled: Boolean(sdk),
+    queryFn: ({ signal }) => api<DevicesResponse>(sdk as SdkLike, '/api/v1/devices', { signal }),
+  });
+}
+
+export function useCreateIdentity(sdk: SdkLike | null) {
+  return useMutation({
+    mutationFn: () => api<{ identity: DeviceIdentity }>(sdk as SdkLike, '/api/v1/devices/identity', { method: 'POST' }),
+  });
+}
+
+export function useRotateIdentity(sdk: SdkLike | null) {
+  return useMutation({
+    mutationFn: () =>
+      api<{ identity: DeviceIdentity; previous: DeviceIdentity | null }>(sdk as SdkLike, '/api/v1/devices/identity/rotate', {
+        method: 'POST',
+      }),
+  });
+}
+
+export function useRegisterDevice(sdk: SdkLike | null) {
+  return useMutation({
+    mutationFn: (input: { address: string; label: string }) =>
+      api<{ device: DeviceView | null; probe: DeviceProbe }>(sdk as SdkLike, '/api/v1/devices', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useProbeDevice(sdk: SdkLike | null) {
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ device: DeviceView | null; probe: DeviceProbe }>(sdk as SdkLike, `/api/v1/devices/${id}/probe`, { method: 'POST' }),
+  });
+}
+
+export function useDeleteDevice(sdk: SdkLike | null) {
+  return useMutation({
+    mutationFn: (id: string) => api<{ ok: boolean }>(sdk as SdkLike, `/api/v1/devices/${id}`, { method: 'DELETE' }),
+  });
+}

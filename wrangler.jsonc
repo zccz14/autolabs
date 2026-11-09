@@ -31,7 +31,9 @@
     "FIRMAMENT_BASE_URL": "https://firma.ntnl.io",
     // 开一轮实验要真的建 Thread：地址是公开的，凭证 CYBION_API_KEY 在 Worker secret 里。
     "CYBION_BASE_URL": "https://cybion.ntnl.io",
-    "APP_ORIGIN": "https://autolabs.ntnl.io"
+    "APP_ORIGIN": "https://autolabs.ntnl.io",
+    // 算指标不发模型，发 eXe：设备执行、AutoLabs 只发指令与记账。
+    "EXE_BASE_URL": "https://exe.ntnl.io"
   },
 
   "routes": [{ "pattern": "autolabs.ntnl.io", "custom_domain": true }],

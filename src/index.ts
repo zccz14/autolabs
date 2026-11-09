@@ -10,6 +10,7 @@ import { driveProjectLoop } from './loop-runner';
 import type { ProjectRow } from './store';
 import { projectIdeaRoutes } from './routes/ideas';
 import { projectLoopRoutes } from './routes/loop';
+import { deviceRoutes } from './routes/devices';
 
 type Variables = { principal: Principal };
 
@@ -33,6 +34,7 @@ app.route('/api/v1/projects', projectLoopRoutes);
 app.route('/api/v1/firmament', firmamentRoutes);
 app.route('/api/v1/snapshots', snapshotRoutes);
 app.route('/api/v1/runs', runRoutes);
+app.route('/api/v1/devices', deviceRoutes);
 
 app.notFound((c) => c.json({ error: 'not_found', message: `没有这个接口：${new URL(c.req.url).pathname}` }, 404));
 
