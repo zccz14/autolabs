@@ -190,7 +190,7 @@ export function ProjectPage() {
             onClick={() =>
               recheck.mutate(undefined, {
                 onSuccess: (result) => {
-                  setRecheckNote(`已把 ${result.queued} 轮实验排进复算队列`);
+                  setRecheckNote(result.note ?? `已把 ${result.queued} 轮实验排进复算队列`);
                   detail.refetch();
                 },
               })

@@ -4,7 +4,7 @@ import { labLabel } from './labs';
 import { findProjectById, recordEvent, type ProjectRow, type RunRow } from './store';
 import { ensureIdentity, identityOf } from './exe-identity';
 import { ackCall, dispatchShell, readOutcome } from './exe';
-import { markDirty, parseMetrics, prepareEval } from './evaluation';
+import { findEvalDevice, markDirty, parseMetrics, prepareEval } from './evaluation';
 
 /**
  * 一键复算整条实验线。
@@ -73,14 +73,57 @@ export function compareMetrics(
   return { state: diffs.length === 0 ? 'matched' : 'diverged', diffs };
 }
 
-/** 把这个项目里所有已结算的实验排进复算队列。 */
-export async function queueRecheck(env: Env, project: ProjectRow): Promise<number> {
+/** 有多少条已结算的实验等着被核。 */
+export async function countSettledRuns(env: Env, project: ProjectRow): Promise<number> {
   const count = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM runs WHERE project_id = ? AND state IN ('frozen', 'rejected')`,
   )
     .bind(project.id)
     .first<{ n: number }>();
-  const queued = count?.n ?? 0;
+  return count?.n ?? 0;
+}
+
+/**
+ * 按下「复算」之前先判一次：这件事现在做得了吗。
+ *
+ * 判定是纯的，只有三个输入：有多少条已结算的实验、项目选没选设备、那台设备还在不在。
+ * 没有设备时每一轮都会在派发前失败，而队列本身看不出区别——只能靠这一句话在按下
+ * 按钮的那一刻说清楚，而不是等队列排完、任务全成 failed 之后才发现。
+ */
+export interface RecheckGateInput {
+  settledRuns: number;
+  deviceId: string | null;
+  deviceFound: boolean;
+}
+
+export type RecheckGate =
+  | { ok: true }
+  | { ok: false; code: 'nothing_to_recheck' | 'no_eval_device' | 'unknown_device'; message: string };
+
+export function planRecheck(input: RecheckGateInput): RecheckGate {
+  if (input.settledRuns === 0) {
+    return { ok: false, code: 'nothing_to_recheck', message: '这个项目还没有已结算的实验：先跑出至少一轮，才有东西可复算。' };
+  }
+  if (!input.deviceId) {
+    return {
+      ok: false,
+      code: 'no_eval_device',
+      message: '项目还没有选评估设备：复算要在一台机器上把包重算一遍。先在项目设置里选一台设备，再复算。',
+    };
+  }
+  if (!input.deviceFound) {
+    return {
+      ok: false,
+      code: 'unknown_device',
+      message: '项目选的评估设备已经不在项目所有者名下了：去设备页确认它还在，再重新选一次。',
+    };
+  }
+  return { ok: true };
+}
+
+/** 把这个项目里所有已结算的实验排进复算队列。 */
+export async function queueRecheck(env: Env, project: ProjectRow): Promise<number> {
+  const queued = await countSettledRuns(env, project);
   if (queued === 0) return 0;
   await env.DB.prepare(
     `UPDATE runs SET recheck_state = 'queued', recheck_attempts = 0, recheck_at = NULL, recheck_call_id = NULL,

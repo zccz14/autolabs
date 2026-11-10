@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareMetrics } from '../src/recheck';
+import { compareMetrics, planRecheck } from '../src/recheck';
 
 describe('复算核对', () => {
   it('算出来一样，就是一条可复现的证据', () => {
@@ -28,5 +28,31 @@ describe('复算核对', () => {
   it('当年没记数字（rejected 的行）就只跟空的比', () => {
     expect(compareMetrics(null, {}).state).toBe('matched');
     expect(compareMetrics(null, { sharpe: 1 }).state).toBe('diverged');
+  });
+});
+
+describe('按下复算之前先判一次', () => {
+  const ready = { settledRuns: 3, deviceId: 'dev_1', deviceFound: true };
+
+  it('都齐了才排队', () => {
+    expect(planRecheck(ready)).toEqual({ ok: true });
+  });
+
+  it('没有已结算的实验：先说没有，不去要设备', () => {
+    const gate = planRecheck({ ...ready, settledRuns: 0, deviceId: null, deviceFound: false });
+    expect(gate.ok).toBe(false);
+    expect(gate.ok === false && gate.code).toBe('nothing_to_recheck');
+  });
+
+  it('没选设备就拒绝：排进去的每一轮都会在派发前失败，队列看不出区别', () => {
+    const gate = planRecheck({ ...ready, deviceId: null, deviceFound: false });
+    expect(gate.ok).toBe(false);
+    expect(gate.ok === false && gate.code).toBe('no_eval_device');
+    expect(gate.ok === false && gate.message).toContain('评估设备');
+  });
+
+  it('选了设备但设备已经不在了，也是拒绝，且理由不同', () => {
+    const gate = planRecheck({ ...ready, deviceFound: false });
+    expect(gate.ok === false && gate.code).toBe('unknown_device');
   });
 });
