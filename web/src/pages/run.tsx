@@ -141,7 +141,11 @@ export function RunPage() {
       <Section title={t('label.evaluation')} description={t('eval.hint')}>
         <div className="flex flex-col gap-1 text-xs">
           <p>
-            {run.state === 'evaluating' ? t('eval.waiting') : run.metrics ? t('eval.done') : t('eval.none')}
+            {run.state === 'evaluating'
+              ? t('eval.waiting')
+              : run.state === 'frozen'
+                ? t('eval.done')
+                : t('eval.rejected')}
           </p>
           {run.state === 'evaluating' && run.eval?.error ? <p className="text-destructive">{run.eval.error}</p> : null}
           {run.eval?.device_address ? (
