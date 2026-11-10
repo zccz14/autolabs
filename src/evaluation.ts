@@ -23,6 +23,7 @@ import { matchMetrics, missingRequiredMetrics } from './metrics';
 
 export const EVAL_EVENTS = {
   dispatched: 'run.evaluation_dispatched',
+  dirty: 'run.dirty',
   settled: 'run.evaluation_settled',
   failed: 'run.evaluation_failed',
 } as const;
@@ -185,6 +186,18 @@ async function datasetLabel(env: Env, run: RunRow): Promise<string> {
   return pin ? `${pin.firmament_dataset_id}@${pin.digest.slice(0, 16)}` : '';
 }
 
+/**
+ * 这个包不符合规范，算不出指标。
+ *
+ * 不记成 rejected：实验本身没输，输的是「它没说自己怎么被算」。也不烧尝试次数——
+ * 等一个 Agent 把 lab.json 补上，补好之后这一轮自己就接着走。
+ */
+async function markDirty(env: Env, project: ProjectRow, run: RunRow, reason: string): Promise<void> {
+  if (run.dirty_reason === reason) return;
+  await env.DB.prepare(`UPDATE runs SET dirty_reason = ?, eval_error = NULL WHERE id = ?`).bind(reason, run.id).run();
+  await recordEvent(env, EVAL_EVENTS.dirty, project.id, null, { run_id: run.id, reason });
+}
+
 /** 派一次评估。成功就把绑定信息落到 run 上；失败按次数记账，够次数就认账。 */
 export async function dispatchEvaluation(env: Env, project: ProjectRow, run: RunRow): Promise<void> {
   const device = await evalDevice(env, project);
@@ -206,18 +219,15 @@ export async function dispatchEvaluation(env: Env, project: ProjectRow, run: Run
   // 包里写的坏掉时不悄悄退回——那会让「用的是哪套算法」变成一件猜的事。
   const manifest = await readLabManifest(env, snapshot.id);
   if (manifest.kind === 'invalid') {
-    await settleRejected(env, project, run, manifest.message);
+    await markDirty(env, project, run, manifest.message);
+    return;
+  }
+  if (manifest.kind === 'absent' && !project.eval_command?.trim()) {
+    await markDirty(env, project, run, `快照根目录没有 ${LAB_MANIFEST_FILE}：这个包没说自己怎么被评估`);
     return;
   }
   const command = manifest.kind === 'ok' ? manifest.manifest.command : (project.eval_command?.trim() ?? '');
   const source = manifest.kind === 'ok' ? 'snapshot' : 'project';
-  if (!command) {
-    await env.DB.prepare(`UPDATE runs SET eval_error = ? WHERE id = ? AND eval_call_id IS NULL`).bind(
-      `还没有评估入口：在快照根目录放一份 ${LAB_MANIFEST_FILE}，或者在项目设置里写一条命令`,
-      run.id,
-    ).run();
-    return;
-  }
   const timeoutSeconds =
     manifest.kind === 'ok' ? (manifest.manifest.timeoutSeconds ?? EVAL_TIMEOUT_SECONDS) : EVAL_TIMEOUT_SECONDS;
 

@@ -85,6 +85,7 @@ pre.block { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; l
 .pill-rejected { color: var(--muted-foreground); border-color: var(--border); background: var(--muted); }
 .pill-live { color: var(--foreground); border-color: var(--border); border-style: dashed; background: transparent; }
 .pill-proposed { color: var(--muted-foreground); }
+.pill-dirty { color: var(--destructive); border-color: var(--destructive); background: transparent; }
 
 /*
  * 思路与结论的 Markdown 排版：标题要比正文重、代码块要能换行、

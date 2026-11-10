@@ -86,6 +86,10 @@ export const COPY = {
     en: 'Metrics are computed by an evaluation command on your own machine; the executor only builds the experiment.',
   },
   'eval.waiting': { zh: '等评估器算出指标…', en: 'Waiting for the evaluator…' },
+  'eval.dirty': {
+    zh: '这个包不符合规范，算不出指标',
+    en: 'This package does not follow the spec, so no metrics can be computed',
+  },
   'eval.done': { zh: '这一轮的指标已经算出来了。', en: 'This run has its metrics.' },
   'eval.none': { zh: '这一轮还没有指标。', en: 'This run has no metrics yet.' },
   'eval.rejected': {

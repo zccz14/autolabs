@@ -76,6 +76,10 @@ export function viewRun(run: RunRow) {
     created_by: run.created_by,
     created_at: run.created_at,
     settled_at: run.settled_at,
+    /** 包不符合规范：算不出指标，等着被修。修好之后这一格回到 null。 */
+    dirty: run.dirty_reason
+      ? { reason: run.dirty_reason, attempts: run.repair_attempts, thread_id: run.repair_thread_id }
+      : null,
     /** 指标由评估器算：这几列说的是「派给谁了、还在等吗、上一次为什么没成」。 */
     eval: {
       call_id: run.eval_call_id,

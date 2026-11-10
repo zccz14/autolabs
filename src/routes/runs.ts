@@ -9,6 +9,7 @@ import {
   allocateLabNo,
   findProjectById,
   findRun,
+  findSnapshot,
   currentMetrics,
   latestSnapshot,
   listRuns,
@@ -20,6 +21,7 @@ import {
 import { createThread, sendInput } from '../cybion';
 import { callerOf, withCybionKey, type Caller } from '../credentials';
 import { buildRunBrief, withExclusion } from '../runs';
+import { readLabManifest } from '../lab-manifest';
 import { viewRun } from './projects';
 import { blobKey } from './snapshots';
 
@@ -417,6 +419,45 @@ runRoutes.post('/:runId/implemented', async (c) => {
       ? { id: outputSnapshotId, files: outputEntries.length, blobs: outputEntries.map((entry) => ({ path: entry.path, sha256: entry.sha256 })) }
       : null,
   });
+});
+
+/**
+ * 修复交回来了：这一轮的包补上了 lab.json。
+ *
+ * 修好的包就是这一轮的代码，所以替换 `input_snapshot_id`——Soul 第 6 条允许
+ * 「结算之前，为了合规可以改代码」。核两件事：派生自原快照、lab.json 真能解析。
+ */
+runRoutes.post('/:runId/repaired', async (c) => {
+  const { run, access, principal } = await accessRun(c.env, c.req.raw, c.req.param('runId'), 'runner');
+  const payload = await readJson<Record<string, unknown>>(c);
+  const snapshotId = requireString(payload.snapshot_id, 'snapshot_id', 80);
+  const snapshot = await findSnapshot(c.env, snapshotId);
+  if (!snapshot || snapshot.project_id !== access.project.id) return fail(404, 'unknown_snapshot', '没有这份快照');
+  if (['frozen', 'rejected', 'lost'].includes(run.state)) {
+    return fail(409, 'already_settled', '这一轮已经结算了：合法的实验是事实，不再改');
+  }
+  if (snapshot.parent_id !== run.input_snapshot_id) {
+    return fail(400, 'not_derived', `修复快照必须从这一轮的快照派生：parent_id 要指向 ${run.input_snapshot_id}`);
+  }
+  const manifest = await readLabManifest(c.env, snapshot.id);
+  if (manifest.kind !== 'ok') {
+    return fail(
+      400,
+      'invalid_manifest',
+      manifest.kind === 'invalid' ? manifest.message : '派生出来的快照里没有 lab.json',
+    );
+  }
+  await c.env.DB.prepare(`UPDATE runs SET input_snapshot_id = ?, dirty_reason = NULL, eval_error = NULL WHERE id = ?`)
+    .bind(snapshot.id, run.id)
+    .run();
+  await recordEvent(c.env, 'run.repaired', access.project.id, principal?.userId ?? null, {
+    run_id: run.id,
+    from_snapshot_id: run.input_snapshot_id,
+    to_snapshot_id: snapshot.id,
+    command: manifest.manifest.command,
+  });
+  const updated = await findRun(c.env, run.id);
+  return c.json({ run: viewRun((updated ?? run) as RunRow) });
 });
 
 export { blobKey };

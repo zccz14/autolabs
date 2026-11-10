@@ -86,6 +86,11 @@ export interface RunRow {
   /** 这一轮实际跑了哪条命令、它来自快照里的 lab.json 还是项目设置。 */
   eval_command: string | null;
   eval_command_source: string | null;
+  /** 非空 = 这个包不符合规范、算不出指标，等着被修。 */
+  dirty_reason: string | null;
+  repair_attempts: number;
+  repair_thread_id: string | null;
+  repair_last_at: number | null;
 }
 
 const ROLE_RANK: Record<Role, number> = { reader: 1, runner: 2, maintainer: 3, owner: 4 };

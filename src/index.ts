@@ -13,6 +13,7 @@ import { projectIdeaRoutes } from './routes/ideas';
 import { projectLoopRoutes } from './routes/loop';
 import { deviceRoutes } from './routes/devices';
 import { collectEvaluation, dispatchEvaluation } from './evaluation';
+import { driveRepairs } from './repair';
 
 type Variables = { principal: Principal };
 
@@ -102,7 +103,9 @@ async function driveLoops(env: Env): Promise<void> {
  */
 async function driveEvaluations(env: Env): Promise<void> {
   const rows = (
-    await env.DB.prepare(`SELECT * FROM runs WHERE state = 'evaluating' ORDER BY created_at ASC LIMIT 50`).all<RunRow>()
+    await env.DB.prepare(
+      `SELECT * FROM runs WHERE state = 'evaluating' AND dirty_reason IS NULL ORDER BY created_at ASC LIMIT 50`,
+    ).all<RunRow>()
   ).results ?? [];
   if (rows.length === 0) return;
   const projects = new Map<string, ProjectRow>();
@@ -134,5 +137,6 @@ export default {
     ctx.waitUntil(reconcile(env));
     ctx.waitUntil(driveLoops(env));
     ctx.waitUntil(driveEvaluations(env));
+    ctx.waitUntil(driveRepairs(env));
   },
 } satisfies ExportedHandler<Env>;
