@@ -26,8 +26,15 @@ export const RECHECK_EVENTS = {
   failed: 'run.recheck_failed',
 } as const;
 
-/** 每一拍最多派两个：别把几十个 shell 调用同时砸到同一台机器上。 */
+/** 每一拍最多真的跑两个：别把几十个 shell 调用同时砸到同一台机器上。 */
 export const RECHECK_PER_TICK = 2;
+/**
+ * 每一拍最多看多少个队列里的 run。
+ *
+ * 「不合规」是在派发前就能判出来的——那种不碰设备、不算进上面那个额度。138 个
+ * 实验如果连分类都要 2 个一拍，光排队就要一个多小时。所以分类放宽，真跑收紧。
+ */
+const RECHECK_SCAN_PER_TICK = 40;
 /** 相对容差。同一个包同一个入口，差到这个量级以下算一致。 */
 const RECHECK_EPSILON = 1e-9;
 
@@ -99,13 +106,15 @@ export async function driveRechecks(env: Env): Promise<void> {
   const queued =
     (
       await env.DB.prepare(`SELECT * FROM runs WHERE recheck_state = 'queued' ORDER BY lab_no DESC LIMIT ?`)
-        .bind(RECHECK_PER_TICK)
+        .bind(RECHECK_SCAN_PER_TICK)
         .all<RunRow>()
     ).results ?? [];
+  let deviceCalls = 0;
   for (const run of queued) {
+    if (deviceCalls >= RECHECK_PER_TICK) break;
     const project = await projectOf(run.project_id);
     if (!project) continue;
-    await dispatchRecheck(env, project, run);
+    if (await dispatchRecheck(env, project, run)) deviceCalls += 1;
   }
 
   const dispatched =
@@ -119,13 +128,14 @@ export async function driveRechecks(env: Env): Promise<void> {
   }
 }
 
-async function dispatchRecheck(env: Env, project: ProjectRow, run: RunRow): Promise<void> {
+/** 返回 true 表示真的占用了一次设备调用；false 表示在派发前就分类完了。 */
+async function dispatchRecheck(env: Env, project: ProjectRow, run: RunRow): Promise<boolean> {
   const prepared = await prepareEval(env, project, run);
   if (!prepared.ok) {
     // 算不出来的根因通常是不合规的包：标 dirty，让修复合集接手。
     if (prepared.kind === 'dirty') await markDirty(env, project, run, prepared.message);
     await failRecheck(env, project, run, prepared.message);
-    return;
+    return false;
   }
 
   const caller = await identityOf(env, await ensureIdentity(env, project.owner_user_id));
@@ -135,7 +145,7 @@ async function dispatchRecheck(env: Env, project: ProjectRow, run: RunRow): Prom
   });
   if (dispatched.rejected) {
     await failRecheck(env, project, run, `复算命令没派出去（${dispatched.rejected.status}）：${dispatched.rejected.message}`);
-    return;
+    return true;
   }
   await env.DB.prepare(
     `UPDATE runs SET recheck_state = 'dispatched', recheck_call_id = ?, recheck_device_address = ?,
@@ -143,6 +153,7 @@ async function dispatchRecheck(env: Env, project: ProjectRow, run: RunRow): Prom
   )
     .bind(dispatched.call.call_id, prepared.device.address, dispatched.call.expires_at, run.id)
     .run();
+  return true;
 }
 
 async function collectRecheck(env: Env, project: ProjectRow, run: RunRow): Promise<void> {

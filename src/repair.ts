@@ -26,6 +26,8 @@ export const REPAIR_EVENTS = {
   failed: 'run.repair_failed',
 } as const;
 
+/** 每一拍最多开三条：每条都是一个完整的 Agent 会话，开太快就是在烧钱。 */
+const REPAIR_PER_TICK = 3;
 /** 开一条、再催一条，够了。修不好就该人看，而不是一直烧 token。 */
 export const REPAIR_MAX_ATTEMPTS = 2;
 const REPAIR_COOLDOWN_SECONDS = 600;
@@ -158,7 +160,7 @@ export async function driveRepairs(env: Env): Promise<RepairOutcome> {
           WHERE dirty_reason IS NOT NULL
             AND repair_attempts < ?
             AND (repair_last_at IS NULL OR repair_last_at < ?)
-          ORDER BY created_at ASC LIMIT 10`,
+          ORDER BY created_at ASC LIMIT ${REPAIR_PER_TICK}`,
       )
         .bind(REPAIR_MAX_ATTEMPTS, nowSeconds() - REPAIR_COOLDOWN_SECONDS)
         .all<RunRow>()
