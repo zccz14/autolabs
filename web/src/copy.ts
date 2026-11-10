@@ -99,6 +99,7 @@ export const COPY = {
   'eval.attempts': { zh: '尝试', en: 'attempts' },
   'eval.fromSnapshot': { zh: '命令来自快照里的 lab.json', en: 'Command from lab.json in the snapshot' },
   'eval.fromProject': { zh: '命令来自项目设置', en: 'Command from project settings' },
+  'eval.recomputeTree': { zh: '复算用的树', en: 'Tree used for recompute' },
   'project.evalTitle': { zh: '评估入口', en: 'Evaluation entry' },
   'project.evalHint': {
     zh: '一条命令，在你选的设备上跑。它会拿到 AUTOLABS_SNAPSHOT_URL、AUTOLABS_TOKEN、AUTOLABS_DATASET 和 AUTOLABS_METRICS，最后一行打印 {"metrics": {"<key>": <number>}}。',

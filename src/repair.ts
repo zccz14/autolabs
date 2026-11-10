@@ -106,6 +106,41 @@ ${LAB_MANIFEST_SPEC}
 `;
 }
 
+export type RepairAction = 'replace-input' | 'attach-eval-tree';
+
+export type RepairPlan =
+  | { ok: true; action: RepairAction }
+  | { ok: false; code: 'not_derived' | 'invalid_manifest'; message: string };
+
+const SETTLED_STATES = ['frozen', 'rejected', 'lost'];
+
+/**
+ * 补规范该改哪里，取决于这一轮结算了没有。
+ *
+ * - 还没结算：代码还没成为事实，直接替换 input_snapshot_id，旧树留痕；
+ * - 已经结算：代码是事实，一个字不动，只挂一份合规的评估树，让它能复算。
+ *
+ * 两种情况都核同一件事：新快照必须是从这一轮现有的那份派生的，且 lab.json 能解析。
+ */
+export function planRepair(
+  run: { state: string; input_snapshot_id: string; eval_snapshot_id: string | null },
+  snapshot: { parent_id: string | null },
+  manifest: { kind: 'absent' | 'ok' | 'invalid'; message?: string },
+): RepairPlan {
+  const base = run.eval_snapshot_id ?? run.input_snapshot_id;
+  if (snapshot.parent_id !== base) {
+    return { ok: false, code: 'not_derived', message: `修复快照必须从这一轮的快照派生：parent_id 要指向 ${base}` };
+  }
+  if (manifest.kind !== 'ok') {
+    return {
+      ok: false,
+      code: 'invalid_manifest',
+      message: manifest.kind === 'invalid' ? (manifest.message ?? 'lab.json 不合法') : '派生出来的快照里没有 lab.json',
+    };
+  }
+  return { ok: true, action: SETTLED_STATES.includes(run.state) ? 'attach-eval-tree' : 'replace-input' };
+}
+
 export interface RepairOutcome {
   started: number;
   failed: number;
@@ -151,7 +186,7 @@ async function startRepairThread(env: Env, project: ProjectRow, run: RunRow, att
   const origin = env.APP_ORIGIN ?? 'https://autolabs.ntnl.io';
   const caller: Caller = { userId: run.created_by, jwt: null };
   const snapshot = await env.DB.prepare(`SELECT id, tree_sha FROM snapshots WHERE id = ?`)
-    .bind(run.input_snapshot_id)
+    .bind(run.eval_snapshot_id ?? run.input_snapshot_id)
     .first<{ id: string; tree_sha: string }>();
   if (!snapshot) throw new Error('这一轮的快照不见了');
 

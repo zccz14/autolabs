@@ -156,6 +156,8 @@ export interface RunView {
     /** 这一轮实际跑的评估命令，以及它来自快照里的 lab.json 还是项目设置。 */
     command: string | null;
     command_source: string | null;
+    /** 合规的评估树：补规范补出来的那一份，空表示就用这一轮的输入。 */
+    snapshot_id: string | null;
   };
 }
 
