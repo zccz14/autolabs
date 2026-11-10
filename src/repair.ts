@@ -10,6 +10,9 @@ import { LAB_MANIFEST_SPEC } from './lab-spec';
 /**
  * 把不符合规范的包交给一个 Agent 去修。
  *
+ * 扫的是「所有标了脏的行」，不看 state：需要修的既可能是还没结算的（改代码），
+ * 也可能是复算才发现不合规的已结算行（只挂评估树）。哪一种是 `/repaired` 去判的。
+ *
  * 只修一件事：补 `lab.json`（或者改对）。不碰实验内容——那是上一轮的执行体写的，
  * 已经进了快照。所以修复只补入口声明，不碰实验内容——修完的包就是这一轮的代码，
  * 直接替换 `input_snapshot_id`，旧树记进事件。
@@ -152,7 +155,7 @@ export async function driveRepairs(env: Env): Promise<RepairOutcome> {
     (
       await env.DB.prepare(
         `SELECT * FROM runs
-          WHERE state = 'evaluating' AND dirty_reason IS NOT NULL
+          WHERE dirty_reason IS NOT NULL
             AND repair_attempts < ?
             AND (repair_last_at IS NULL OR repair_last_at < ?)
           ORDER BY created_at ASC LIMIT 10`,
