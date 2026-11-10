@@ -102,7 +102,9 @@ projectSnapshotRoutes.post('/:slug/snapshots', async (c) => {
   if (parentId) {
     const parent = await findSnapshot(c.env, parentId);
     if (!parent || parent.project_id !== access.project.id) return fail(400, 'invalid_parent', '父快照不存在或不属于本项目');
-    if (parent.frozen_at !== null) return fail(409, 'parent_frozen', '父快照已冻结，请从它派生新快照（冻结不等于可写）');
+    // 冻结只拒绝改写，不拒绝派生：快照是内容寻址的不可变对象，新建子快照从不改动父快照。
+    // 修复已结算实验的评估树（ADR 0012）正是「从冻结的旧包派生一份带 lab.json 的新快照」，
+    // 所以这里不能因为父快照已冻结就把派生拦掉。
   }
 
   const shas = [...new Set(Object.values(files).map((value) => String(value).toLowerCase()))];
