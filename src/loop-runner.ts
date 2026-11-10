@@ -7,6 +7,7 @@ import { readIdea, requestIdea } from './proposals';
 import { openRun, startRunThread } from './routes/runs';
 import { labLabel } from './labs';
 import { nowSeconds } from './ids';
+import { findEvalDevice } from './evaluation';
 
 /**
  * 研究循环的一拍。
@@ -20,6 +21,17 @@ export async function driveProjectLoop(env: Env, project: ProjectRow): Promise<v
   // 与其每分钟空转，不如现在就说清楚缺什么。
   if (!project.eval_command?.trim()) {
     await pauseWithError(env, project.id, '还没有配置评估入口：在研究循环里，指标由一条评估命令算出来。在项目设置里补上再启动。');
+    return;
+  }
+  // 入口有了还得有地方跑：命令没有机器执行，每一轮都会卡在派发前。
+  if (!(await findEvalDevice(env, project))) {
+    await pauseWithError(
+      env,
+      project.id,
+      project.eval_device_id
+        ? '项目选的评估设备已经不在项目所有者名下了：去设备页确认它还在，再重新选一次，否则每一轮都算不出指标。'
+        : '还没有选评估设备：指标要在一台机器上用评估命令算出来。在项目设置里选一台设备再启动。',
+    );
     return;
   }
   const origin = env.APP_ORIGIN ?? 'https://autolabs.ntnl.io';

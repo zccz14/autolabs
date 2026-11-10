@@ -171,7 +171,8 @@ export interface DeviceRef {
   label: string;
 }
 
-async function evalDevice(env: Env, project: ProjectRow): Promise<DeviceRef | null> {
+/** 这台项目要去哪台机器上算。没有设备就拿不出评估入口——评估与复算都要它。 */
+export async function findEvalDevice(env: Env, project: ProjectRow): Promise<DeviceRef | null> {
   if (!project.eval_device_id) return null;
   return env.DB.prepare(`SELECT id, address, label FROM devices WHERE id = ? AND user_id = ?`)
     .bind(project.eval_device_id, project.owner_user_id)
@@ -209,7 +210,7 @@ export type PreparedEval =
  * （一个结算，一个核对）。所以它单独在这里，两边共用，免得慢慢长成两套。
  */
 export async function prepareEval(env: Env, project: ProjectRow, run: RunRow): Promise<PreparedEval> {
-  const device = await evalDevice(env, project);
+  const device = await findEvalDevice(env, project);
   if (!device) {
     return { ok: false, kind: 'no-device', message: '项目还没有选评估设备：在设备页接入一台机器，然后在项目设置里选它' };
   }

@@ -20,7 +20,8 @@ import {
   type SnapshotRow,
 } from '../store';
 import { mintProjectToken } from '../tokens';
-import { compareMetrics, queueRecheck } from '../recheck';
+import { compareMetrics, countSettledRuns, planRecheck, queueRecheck } from '../recheck';
+import { findEvalDevice } from '../evaluation';
 
 const routes = new Hono<{ Bindings: Env }>();
 
@@ -272,6 +273,16 @@ routes.post('/:slug/settings', async (c) => {
 routes.post('/:slug/recheck', async (c) => {
   const principal = await authenticate(c.req.raw, c.env);
   const access = await loadProject(c.env, c.req.param('slug'), principal, 'maintainer', 'write');
+  // 没设备就先说清楚：不然排进队列的每一轮都会在派发前失败，队列本身看不出区别。
+  const gate = planRecheck({
+    settledRuns: await countSettledRuns(c.env, access.project),
+    deviceId: access.project.eval_device_id,
+    deviceFound: (await findEvalDevice(c.env, access.project)) !== null,
+  });
+  if (!gate.ok) {
+    if (gate.code === 'nothing_to_recheck') return c.json({ queued: 0, note: gate.message });
+    return fail(400, gate.code, gate.message);
+  }
   const queued = await queueRecheck(c.env, access.project);
   return c.json({ queued });
 });

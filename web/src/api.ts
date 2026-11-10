@@ -549,6 +549,7 @@ export function useSaveProjectSettings(sdk: SdkLike | null, slug: string | undef
 /** 一键复算：把这条实验线上所有已结算的实验重算一遍，只核对、不改数字。 */
 export function useRecheckAll(sdk: SdkLike | null, slug: string | undefined) {
   return useMutation({
-    mutationFn: () => api<{ queued: number }>(sdk as SdkLike, `/api/v1/projects/${slug}/recheck`, { method: 'POST' }),
+    mutationFn: () =>
+      api<{ queued: number; note?: string }>(sdk as SdkLike, `/api/v1/projects/${slug}/recheck`, { method: 'POST' }),
   });
 }
