@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEvalCommand, judgeEvaluation, parseMetrics, shellQuote } from '../src/evaluation';
+import { buildEvalScript, judgeEvaluation, parseMetrics, shellQuote } from '../src/evaluation';
 
 const command = {
   origin: 'https://autolabs.ntnl.io',
@@ -16,20 +16,32 @@ const command = {
 
 describe('评估命令的契约', () => {
   it('把输入全塞进环境变量，命令本身原样留在最后', () => {
-    const built = buildEvalCommand(command);
-    expect(built.endsWith(' python -m harness.evaluate')).toBe(true);
-    expect(built).toContain("AUTOLABS_SNAPSHOT_URL='https://autolabs.ntnl.io/api/v1/snapshots/snp_1/tar.gz'");
-    expect(built).toContain("AUTOLABS_TOKEN='alb_tok_secret'");
-    expect(built).toContain("AUTOLABS_DATASET='okx-btc-usdt-perp-1m@deadbeef'");
+    const built = buildEvalScript(command);
+    expect(built.trimEnd().endsWith('python -m harness.evaluate')).toBe(true);
+    expect(built).toContain("export AUTOLABS_SNAPSHOT_URL='https://autolabs.ntnl.io/api/v1/snapshots/snp_1/tar.gz'");
+    expect(built).toContain("export AUTOLABS_TOKEN='alb_tok_secret'");
+    expect(built).toContain("export AUTOLABS_DATASET='okx-btc-usdt-perp-1m@deadbeef'");
     // 口径也一起下发：评估器要按项目定义的那几个 key 说话。
     expect(built).toContain('"key":"sharpe"');
     expect(built).toContain('"version":2');
   });
 
+  it('先把快照解到一个临时目录，再进去跑命令：工作目录是有定义的', () => {
+    const built = buildEvalScript(command);
+    const lines = built.split('\n');
+    const unzip = lines.findIndex((line) => line.includes('tar -xzf'));
+    const cd = lines.findIndex((line) => line === 'cd "$AUTOLABS_WORKDIR"');
+    const run = lines.findIndex((line) => line === 'python -m harness.evaluate');
+    expect(built).toContain('export AUTOLABS_WORKDIR');
+    expect(unzip).toBeGreaterThan(0);
+    expect(cd).toBeGreaterThan(unzip);
+    expect(run).toBeGreaterThan(cd);
+  });
+
   it('值里有单引号也不会把命令拼歪', () => {
     expect(shellQuote("a'b")).toBe("'a'\\''b'");
-    const built = buildEvalCommand({ ...command, dataset: "a'b" });
-    expect(built).toContain(`AUTOLABS_DATASET='a'\\''b'`);
+    const built = buildEvalScript({ ...command, dataset: "a'b" });
+    expect(built).toContain(`export AUTOLABS_DATASET='a'\\''b'`);
   });
 
   it('指标取最后一行 JSON，前面打多少日志都不影响', () => {

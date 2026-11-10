@@ -151,6 +151,9 @@ export interface RunView {
     expires_at: number | null;
     attempts: number;
     error: string | null;
+    /** 这一轮实际跑的评估命令，以及它来自快照里的 lab.json 还是项目设置。 */
+    command: string | null;
+    command_source: string | null;
   };
 }
 

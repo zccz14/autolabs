@@ -5,6 +5,7 @@ import { currentMetrics, findSnapshot, recordEvent, type ProjectRow, type RunRow
 import { ensureIdentity, findIdentity, identityOf } from './exe-identity';
 import { ackCall, dispatchShell, readOutcome } from './exe';
 import { mintProjectToken } from './tokens';
+import { LAB_MANIFEST_FILE, readLabManifest } from './lab-manifest';
 import { matchMetrics, missingRequiredMetrics } from './metrics';
 
 /**
@@ -97,7 +98,7 @@ export function judgeEvaluation(
   };
 }
 
-export interface EvalCommandInput {
+export interface EvalScriptInput {
   origin: string;
   projectSlug: string;
   runId: string;
@@ -110,7 +111,15 @@ export interface EvalCommandInput {
   command: string;
 }
 
-export function buildEvalCommand(input: EvalCommandInput): string {
+/**
+ * 派到设备上的那整段脚本。
+ *
+ * 它先干三件杂活，让评估命令本身只管算：建一个临时目录、把这一轮的快照拉下来解开、
+ * 走进去。所以命令的工作目录是有定义的——`AUTOLABS_WORKDIR`，不用自己猜、也不用
+ * 自己 mktemp。这也是「实验包」这个说法能成立的原因：包被展开成一个目录，命令在
+ * 里面跑。
+ */
+export function buildEvalScript(input: EvalScriptInput): string {
   const vars: Record<string, string> = {
     AUTOLABS_RUN_ID: input.runId,
     AUTOLABS_LAB: input.lab,
@@ -122,10 +131,18 @@ export function buildEvalCommand(input: EvalCommandInput): string {
     AUTOLABS_DATASET: input.dataset,
     AUTOLABS_METRICS: JSON.stringify(input.metrics),
   };
-  const prefix = Object.entries(vars)
-    .map(([key, value]) => `${key}=${shellQuote(value)}`)
-    .join(' ');
-  return `${prefix} ${input.command}`;
+  return [
+    'set -e',
+    ...Object.entries(vars).map(([key, value]) => `export ${key}=${shellQuote(value)}`),
+    'AUTOLABS_WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/autolabs.XXXXXX")',
+    'export AUTOLABS_WORKDIR',
+    'AUTOLABS_ARCHIVE="$AUTOLABS_WORKDIR/.snapshot.tar.gz"',
+    'curl -fsSL -H "Authorization: Bearer $AUTOLABS_TOKEN" "$AUTOLABS_SNAPSHOT_URL" -o "$AUTOLABS_ARCHIVE"',
+    'tar -xzf "$AUTOLABS_ARCHIVE" -C "$AUTOLABS_WORKDIR"',
+    'rm -f "$AUTOLABS_ARCHIVE"',
+    'cd "$AUTOLABS_WORKDIR"',
+    input.command,
+  ].join('\n');
 }
 
 /**
@@ -170,16 +187,6 @@ async function datasetLabel(env: Env, run: RunRow): Promise<string> {
 
 /** 派一次评估。成功就把绑定信息落到 run 上；失败按次数记账，够次数就认账。 */
 export async function dispatchEvaluation(env: Env, project: ProjectRow, run: RunRow): Promise<void> {
-  const command = project.eval_command?.trim();
-  if (!command) {
-    // 没配入口不是「失败」，是「还没准备好」：不烧尝试次数，配好了下一拍自己就动。
-    await env.DB.prepare(`UPDATE runs SET eval_error = ? WHERE id = ? AND eval_call_id IS NULL`).bind(
-      '项目还没有配置评估入口：在项目设置里写一条评估命令',
-      run.id,
-    ).run();
-    return;
-  }
-
   const device = await evalDevice(env, project);
   if (!device) {
     await env.DB.prepare(`UPDATE runs SET eval_error = ? WHERE id = ? AND eval_call_id IS NULL`).bind(
@@ -195,22 +202,41 @@ export async function dispatchEvaluation(env: Env, project: ProjectRow, run: Run
     return;
   }
 
+  // 算法跟着快照走：包里有 lab.json 就用它，没有才退回项目设置。
+  // 包里写的坏掉时不悄悄退回——那会让「用的是哪套算法」变成一件猜的事。
+  const manifest = await readLabManifest(env, snapshot.id);
+  if (manifest.kind === 'invalid') {
+    await settleRejected(env, project, run, manifest.message);
+    return;
+  }
+  const command = manifest.kind === 'ok' ? manifest.manifest.command : (project.eval_command?.trim() ?? '');
+  const source = manifest.kind === 'ok' ? 'snapshot' : 'project';
+  if (!command) {
+    await env.DB.prepare(`UPDATE runs SET eval_error = ? WHERE id = ? AND eval_call_id IS NULL`).bind(
+      `还没有评估入口：在快照根目录放一份 ${LAB_MANIFEST_FILE}，或者在项目设置里写一条命令`,
+      run.id,
+    ).run();
+    return;
+  }
+  const timeoutSeconds =
+    manifest.kind === 'ok' ? (manifest.manifest.timeoutSeconds ?? EVAL_TIMEOUT_SECONDS) : EVAL_TIMEOUT_SECONDS;
+
   const definitions = await currentMetrics(env, project.id);
   const identityRow = await ensureIdentity(env, project.owner_user_id);
   const caller = await identityOf(env, identityRow);
   const origin = env.APP_ORIGIN ?? 'https://autolabs.ntnl.io';
 
-  // 只读、两小时到期的项目凭据：评估器要能把快照拉下来，除此之外什么都做不了。
+  // 只读、按这次调用的寿命到期的项目凭据：评估器要能把快照拉下来，除此之外什么都做不了。
   const minted = await mintProjectToken();
   const createdAt = nowSeconds();
   await env.DB.prepare(
     `INSERT INTO project_tokens (id, project_id, label, secret_sha256, capabilities, created_by, created_at, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(minted.id, project.id, `评估 ${labLabel(run.lab_no)}`, minted.secretSha256, 'read', project.owner_user_id, createdAt, createdAt + EVAL_TIMEOUT_SECONDS)
+    .bind(minted.id, project.id, `评估 ${labLabel(run.lab_no)}`, minted.secretSha256, 'read', project.owner_user_id, createdAt, createdAt + timeoutSeconds)
     .run();
 
-  const shellCommand = buildEvalCommand({
+  const script = buildEvalScript({
     origin,
     projectSlug: project.slug,
     runId: run.id,
@@ -228,9 +254,9 @@ export async function dispatchEvaluation(env: Env, project: ProjectRow, run: Run
     command,
   });
 
-  const dispatched = await dispatchShell(env, caller, device.address, shellCommand, {
-    timeoutSeconds: EVAL_TIMEOUT_SECONDS,
-    ttlSeconds: EVAL_TIMEOUT_SECONDS,
+  const dispatched = await dispatchShell(env, caller, device.address, script, {
+    timeoutSeconds,
+    ttlSeconds: timeoutSeconds,
   });
 
   if (dispatched.rejected) {
@@ -239,15 +265,17 @@ export async function dispatchEvaluation(env: Env, project: ProjectRow, run: Run
   }
 
   await env.DB.prepare(
-    `UPDATE runs SET eval_call_id = ?, eval_device_address = ?, eval_expires_at = ?, eval_dispatched_at = ?, eval_attempts = eval_attempts + 1, eval_error = NULL WHERE id = ?`,
+    `UPDATE runs SET eval_call_id = ?, eval_device_address = ?, eval_expires_at = ?, eval_dispatched_at = ?,
+       eval_attempts = eval_attempts + 1, eval_error = NULL, eval_command = ?, eval_command_source = ? WHERE id = ?`,
   )
-    .bind(dispatched.call.call_id, device.address, dispatched.call.expires_at, createdAt, run.id)
+    .bind(dispatched.call.call_id, device.address, dispatched.call.expires_at, createdAt, command, source, run.id)
     .run();
   await recordEvent(env, EVAL_EVENTS.dispatched, project.id, null, {
     run_id: run.id,
     device_id: device.id,
     call_id: dispatched.call.call_id,
     lab: labLabel(run.lab_no),
+    command_source: source,
   });
 }
 
