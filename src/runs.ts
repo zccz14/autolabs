@@ -56,7 +56,7 @@ export function buildRunBrief(input: RunBriefInput): string {
 
   return `# ${input.lab} · ${input.projectName}
 
-AutoLabs 把你放在这一轮实验的执行位上。做完之后，按第 4 节的格式把结论报回来——那是唯一的结算入口。
+AutoLabs 把你放在这一轮实验的执行位上。做完之后，按第 5 节的格式把结论报回来——那是唯一的结算入口。
 
 | 项 | 值 |
 | --- | --- |
@@ -80,16 +80,36 @@ ${input.idea?.trim() || input.note.trim() || '（这一轮没有写思路：按�
 
 请求都要带一张证明「你是这条 Thread」的令牌（它对文件有读权限）：调用 Cybion 的 \`create_thread_token\` 工具现签一张，60 秒内有效，放进 \`Authorization: Bearer\`。快照是只读的，改动请落在你自己的机器上。
 
-## 3. 判定规则
+## 3. 让这个包能被评估：lab.json
+
+平台的评估器不认识你的代码。它只认一件事：**快照根目录的 \`lab.json\`**。
+
+\`\`\`json
+{
+  "evaluate": "python -m pack.evaluate"
+}
+\`\`\`
+
+派评估的时候，平台会：把这一轮的快照解到一个临时目录、\`cd\` 进去、跑这条命令。所以：
+
+- 命令的当前目录就是包根目录，\`AUTOLABS_WORKDIR\` 也是它；不要假设别的工作目录。
+- 数据集在 \`AUTOLABS_DATASET\`（\`<id>@<digest 前 16 位>\`），本轮钉住的那一份；没绑就是空串。
+- 口径在 \`AUTOLABS_METRICS\`（\`[{"key","unit","direction","version"}]\`），只按这些 key 说话。
+- 命令的最后一行打印 \`{"metrics": {"<key>": <number>}}\`，退出码 0。前面打多少日志都行。
+- 想自己定超时就写成 \`{"evaluate": {"command": "…", "timeout_seconds": 1800}}\`；默认和上限都是一小时。
+
+**这一条是硬要求**：没有 \`lab.json\`、或者它写得不对，这一轮就算不出指标，进不了榜单。它跟着快照走，所以改算法＝开新一轮，历史行不会被今天的命令改写。
+
+## 4. 判定规则
 
 - **no-future-leak**：任何一步都只能用入场时可知的字段；引用了当时的未来信息，这一轮就不算数。
 - **canonical-byte-equal**：同一口径下的两次执行，产出必须逐字节一致。
 - **指标不是你的活。** 这一轮做完之后，平台会在用户的机器上跑一条评估命令，把数字算出来。你要做的是让那些数字算得出来——下面这些口径就是它要的东西，不要自创 key：
 ${metricLines}
 
-所以你在第 4 节里只报「实验做完了、我自己跑过哪些检查」。数字由评估器产出，报上来也会被拒。
+所以你在第 5 节里只报「实验做完了、我自己跑过哪些检查」。数字由评估器产出，报上来也会被拒。
 
-## 4. 怎么报结论
+## 5. 怎么报结论
 
 \`\`\`http
 POST ${base}/api/v1/runs/${input.runId}/implemented

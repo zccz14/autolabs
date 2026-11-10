@@ -84,6 +84,8 @@ export function viewRun(run: RunRow) {
       expires_at: run.eval_expires_at,
       attempts: run.eval_attempts,
       error: run.eval_error,
+      command: run.eval_command,
+      command_source: run.eval_command_source,
     },
   };
 }

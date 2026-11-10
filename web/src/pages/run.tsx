@@ -149,6 +149,12 @@ export function RunPage() {
               {run.eval.device_address} · {t('eval.attempts')} {run.eval.attempts}
             </p>
           ) : null}
+          {run.eval?.command ? (
+            <p className="font-mono text-[0.7rem] text-muted-foreground">
+              {run.eval.command_source === 'snapshot' ? t('eval.fromSnapshot') : t('eval.fromProject')}：
+              {run.eval.command}
+            </p>
+          ) : null}
         </div>
       </Section>
 

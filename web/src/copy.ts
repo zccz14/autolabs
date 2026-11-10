@@ -89,6 +89,8 @@ export const COPY = {
   'eval.done': { zh: '这一轮的指标已经算出来了。', en: 'This run has its metrics.' },
   'eval.none': { zh: '这一轮还没有指标。', en: 'This run has no metrics yet.' },
   'eval.attempts': { zh: '尝试', en: 'attempts' },
+  'eval.fromSnapshot': { zh: '命令来自快照里的 lab.json', en: 'Command from lab.json in the snapshot' },
+  'eval.fromProject': { zh: '命令来自项目设置', en: 'Command from project settings' },
   'project.evalTitle': { zh: '评估入口', en: 'Evaluation entry' },
   'project.evalHint': {
     zh: '一条命令，在你选的设备上跑。它会拿到 AUTOLABS_SNAPSHOT_URL、AUTOLABS_TOKEN、AUTOLABS_DATASET 和 AUTOLABS_METRICS，最后一行打印 {"metrics": {"<key>": <number>}}。',

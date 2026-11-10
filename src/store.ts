@@ -83,6 +83,9 @@ export interface RunRow {
   eval_dispatched_at: number | null;
   eval_attempts: number;
   eval_error: string | null;
+  /** 这一轮实际跑了哪条命令、它来自快照里的 lab.json 还是项目设置。 */
+  eval_command: string | null;
+  eval_command_source: string | null;
 }
 
 const ROLE_RANK: Record<Role, number> = { reader: 1, runner: 2, maintainer: 3, owner: 4 };
