@@ -143,6 +143,8 @@ export interface RunView {
   gates: { rule_id: string; pass: boolean; evidence: string | null }[];
   created_at: number;
   settled_at: number | null;
+  /** 包不符合规范：算不出指标，等着被修。修好之后这一格回到 null。 */
+  dirty?: { reason: string; attempts: number; thread_id: string | null } | null;
   /** 指标由评估器算：这里说的是「派给谁了、还在等吗、上一次为什么没成」。 */
   eval?: {
     call_id: string | null;

@@ -33,6 +33,7 @@ const STATE_CLASS: Record<string, string> = {
   evaluating: 'pill-live',
   proposed: 'pill-proposed',
   lost: 'pill-rejected',
+  dirty: 'pill-dirty',
 };
 
 export function StatePill({ state }: { state: string }) {

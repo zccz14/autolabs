@@ -33,7 +33,7 @@ type Tab = 'runs' | 'leaderboard' | 'metrics' | 'dataset' | 'snapshots' | 'token
 const MetricChart = lazy(() => import('../components/metric-chart').then((module) => ({ default: module.MetricChart })));
 
 /** 目录的状态筛选：先给最常见的前三个，其余按 run 生命周期补齐。 */
-const STATE_FILTERS = ['all', 'frozen', 'rejected', 'proposed', 'dispatched', 'running', 'lost'] as const;
+const STATE_FILTERS = ['all', 'dirty', 'frozen', 'rejected', 'proposed', 'dispatched', 'running', 'lost'] as const;
 type StateFilter = (typeof STATE_FILTERS)[number];
 
 /** 目录的一行只放摘要：完整的思路与结果在 run 详情里，这里靠 CSS 截到两行。 */
@@ -84,7 +84,12 @@ export function ProjectPage() {
   const runs = detail.data?.runs ?? [];
   const snapshots = detail.data?.snapshots ?? [];
   const frozen = runs.filter((run) => run.state === 'frozen');
-  const visibleRuns = stateFilter === 'all' ? runs : runs.filter((run) => run.state === stateFilter);
+  const visibleRuns =
+    stateFilter === 'all'
+      ? runs
+      : stateFilter === 'dirty'
+        ? runs.filter((run) => Boolean(run.dirty))
+        : runs.filter((run) => run.state === stateFilter);
   const definitions = [...(metricDefs.data?.metrics ?? [])].sort((a, b) => a.sort_order - b.sort_order);
   const primary = definitions.find((metric) => metric.is_primary);
   // 榜单按主指标排序：数字缺失的沉底，方向按口径来（回撤这种越低越好）。
@@ -327,7 +332,7 @@ export function ProjectPage() {
                         </Link>
                       </td>
                       <td>
-                        <StatePill state={run.state} />
+                        <StatePill state={run.dirty ? 'dirty' : run.state} />
                       </td>
                       <td className="text-xs text-muted-foreground">
                         <p className="line-clamp-2 break-words">{excerpt(run.idea_md, t('label.ideaEmpty'))}</p>
