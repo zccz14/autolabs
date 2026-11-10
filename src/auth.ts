@@ -100,6 +100,21 @@ async function authenticateThread(raw: string, env: Env): Promise<Principal> {
       capabilities: ['read', 'write', 'verdict'],
     };
   }
+  // 修复 thread 也是一条执行体：它要能把补好的包传上来、并说「这一轮改用新快照」。
+  // 少了这一段，修复 Agent 签出来的令牌会被判 401，只能自己瞎找凭据。
+  const repair = await env.DB.prepare(`SELECT id, project_id, created_by FROM runs WHERE repair_thread_id = ?`)
+    .bind(threadId)
+    .first<{ id: string; project_id: string; created_by: string }>();
+  if (repair) {
+    return {
+      kind: 'thread',
+      userId: repair.created_by,
+      projectId: repair.project_id,
+      runId: repair.id,
+      // 能读能写，但**不能** verdict：修包的人不结算实验。
+      capabilities: ['read', 'write'],
+    };
+  }
   const project = await env.DB.prepare(`SELECT id, owner_user_id FROM projects WHERE idea_thread_id = ?`)
     .bind(threadId)
     .first<{ id: string; owner_user_id: string }>();
