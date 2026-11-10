@@ -153,6 +153,21 @@ export function RunPage() {
               {run.eval.device_address} · {t('eval.attempts')} {run.eval.attempts}
             </p>
           ) : null}
+          {run.eval?.recheck ? (
+            <p className={run.eval.recheck.state === 'diverged' ? 'text-destructive' : 'text-muted-foreground'}>
+              {run.eval.recheck.state === 'matched'
+                ? t('recheck.matched')
+                : run.eval.recheck.state === 'diverged'
+                  ? `${t('recheck.diverged')}：${run.eval.recheck.diffs
+                      .map((diff) => `${diff.key} ${diff.expected ?? '—'} → ${diff.actual ?? '—'}`)
+                      .join('，')}`
+                  : run.eval.recheck.state === 'failed'
+                    ? t('recheck.failed')
+                    : run.eval.recheck.state === 'queued'
+                      ? t('recheck.queued')
+                      : t('recheck.running')}
+            </p>
+          ) : null}
           {run.eval?.snapshot_id ? (
             <p className="font-mono text-[0.7rem] text-muted-foreground">
               {t('eval.recomputeTree')}：{run.eval.snapshot_id}

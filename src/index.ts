@@ -14,6 +14,7 @@ import { projectLoopRoutes } from './routes/loop';
 import { deviceRoutes } from './routes/devices';
 import { collectEvaluation, dispatchEvaluation } from './evaluation';
 import { driveRepairs } from './repair';
+import { driveRechecks } from './recheck';
 
 type Variables = { principal: Principal };
 
@@ -138,5 +139,6 @@ export default {
     ctx.waitUntil(driveLoops(env));
     ctx.waitUntil(driveEvaluations(env));
     ctx.waitUntil(driveRepairs(env));
+    ctx.waitUntil(driveRechecks(env));
   },
 } satisfies ExportedHandler<Env>;

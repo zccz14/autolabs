@@ -100,6 +100,12 @@ export const COPY = {
   'eval.fromSnapshot': { zh: '命令来自快照里的 lab.json', en: 'Command from lab.json in the snapshot' },
   'eval.fromProject': { zh: '命令来自项目设置', en: 'Command from project settings' },
   'eval.recomputeTree': { zh: '复算用的树', en: 'Tree used for recompute' },
+  'action.recheckAll': { zh: '复算全部历史', en: 'Recheck all' },
+  'recheck.queued': { zh: '已排进复算队列', en: 'Queued for recheck' },
+  'recheck.running': { zh: '复算中…', en: 'Rechecking…' },
+  'recheck.matched': { zh: '复算一致', en: 'Recheck matched' },
+  'recheck.diverged': { zh: '复算不一致', en: 'Recheck diverged' },
+  'recheck.failed': { zh: '复算失败', en: 'Recheck failed' },
   'project.evalTitle': { zh: '评估入口', en: 'Evaluation entry' },
   'project.evalHint': {
     zh: '一条命令，在你选的设备上跑。它会拿到 AUTOLABS_SNAPSHOT_URL、AUTOLABS_TOKEN、AUTOLABS_DATASET 和 AUTOLABS_METRICS，最后一行打印 {"metrics": {"<key>": <number>}}。',

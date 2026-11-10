@@ -20,6 +20,7 @@ import {
   useProject,
   useProjectIdea,
   useDevices,
+  useRecheckAll,
   useSaveProjectSettings,
   useSaveRunModel,
   useStartIdea,
@@ -63,9 +64,11 @@ export function ProjectPage() {
   const metricDefs = useMetrics(typed, slug);
   const [tab, setTab] = useState<Tab>('runs');
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
+  const [recheckNote, setRecheckNote] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const startIdea = useStartIdea(typed, slug);
   const loop = useLoopControl(typed, slug);
+  const recheck = useRecheckAll(typed, slug);
   // 项目页一打开就问一次状态：地图没变的话，开表单是直接复用，不再烧一轮。
   const ideaQuery = useProjectIdea(typed, slug, Boolean(slug));
   // 趋势图默认画主指标；用户可以按指标切。
@@ -180,6 +183,21 @@ export function ProjectPage() {
           >
             {loopRunning ? '暂停研究' : '启动研究'}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={recheck.isPending}
+            onClick={() =>
+              recheck.mutate(undefined, {
+                onSuccess: (result) => {
+                  setRecheckNote(`已把 ${result.queued} 轮实验排进复算队列`);
+                  detail.refetch();
+                },
+              })
+            }
+          >
+            {t('action.recheckAll')}
+          </Button>
           <Button size="sm" variant={opening ? 'outline' : 'default'} onClick={toggleOpening}>
             <PlayIcon />
             {t('action.newRun')}
@@ -187,7 +205,9 @@ export function ProjectPage() {
         </div>
       </header>
 
-      <ErrorNote error={detail.error ?? createRun.error ?? freeze.error ?? loop.error} />
+      <ErrorNote error={detail.error ?? createRun.error ?? freeze.error ?? loop.error ?? recheck.error} />
+
+      {recheckNote ? <p className="text-xs text-muted-foreground">{recheckNote}</p> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">实验模型</span>

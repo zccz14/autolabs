@@ -165,7 +165,7 @@ export function parseMetrics(stdout: string): Record<string, unknown> {
   throw new Error('评估器没有给出指标：命令的最后一行应该是一个 JSON 对象，形如 {"metrics":{"sharpe":1.93}}');
 }
 
-interface DeviceRef {
+export interface DeviceRef {
   id: string;
   address: string;
   label: string;
@@ -192,39 +192,37 @@ async function datasetLabel(env: Env, run: RunRow): Promise<string> {
  * 不记成 rejected：实验本身没输，输的是「它没说自己怎么被算」。也不烧尝试次数——
  * 等一个 Agent 把 lab.json 补上，补好之后这一轮自己就接着走。
  */
-async function markDirty(env: Env, project: ProjectRow, run: RunRow, reason: string): Promise<void> {
+export async function markDirty(env: Env, project: ProjectRow, run: RunRow, reason: string): Promise<void> {
   if (run.dirty_reason === reason) return;
   await env.DB.prepare(`UPDATE runs SET dirty_reason = ?, eval_error = NULL WHERE id = ?`).bind(reason, run.id).run();
   await recordEvent(env, EVAL_EVENTS.dirty, project.id, null, { run_id: run.id, reason });
 }
 
-/** 派一次评估。成功就把绑定信息落到 run 上；失败按次数记账，够次数就认账。 */
-export async function dispatchEvaluation(env: Env, project: ProjectRow, run: RunRow): Promise<void> {
+export type PreparedEval =
+  | { ok: true; script: string; timeoutSeconds: number; command: string; source: string; device: DeviceRef }
+  | { ok: false; kind: 'no-device' | 'dirty' | 'no-snapshot'; message: string };
+
+/**
+ * 把「这一轮该怎么算」准备出来：用哪份树、哪条命令、跑在哪台设备、多久超时。
+ *
+ * 派评估与复算都是同一件事——都要按这个准备，只是回来之后做的事不同
+ * （一个结算，一个核对）。所以它单独在这里，两边共用，免得慢慢长成两套。
+ */
+export async function prepareEval(env: Env, project: ProjectRow, run: RunRow): Promise<PreparedEval> {
   const device = await evalDevice(env, project);
   if (!device) {
-    await env.DB.prepare(`UPDATE runs SET eval_error = ? WHERE id = ? AND eval_call_id IS NULL`).bind(
-      '项目还没有选评估设备：在设备页接入一台机器，然后在项目设置里选它',
-      run.id,
-    ).run();
-    return;
+    return { ok: false, kind: 'no-device', message: '项目还没有选评估设备：在设备页接入一台机器，然后在项目设置里选它' };
   }
 
   const snapshot = await findSnapshot(env, run.eval_snapshot_id ?? run.input_snapshot_id);
-  if (!snapshot) {
-    await settleRejected(env, project, run, '输入快照不见了，这一轮无法评估');
-    return;
-  }
+  if (!snapshot) return { ok: false, kind: 'no-snapshot', message: '输入快照不见了，这一轮无法评估' };
 
   // 算法跟着快照走：包里有 lab.json 就用它，没有才退回项目设置。
   // 包里写的坏掉时不悄悄退回——那会让「用的是哪套算法」变成一件猜的事。
   const manifest = await readLabManifest(env, snapshot.id);
-  if (manifest.kind === 'invalid') {
-    await markDirty(env, project, run, manifest.message);
-    return;
-  }
+  if (manifest.kind === 'invalid') return { ok: false, kind: 'dirty', message: manifest.message };
   if (manifest.kind === 'absent' && !project.eval_command?.trim()) {
-    await markDirty(env, project, run, `快照根目录没有 ${LAB_MANIFEST_FILE}：这个包没说自己怎么被评估`);
-    return;
+    return { ok: false, kind: 'dirty', message: `快照根目录没有 ${LAB_MANIFEST_FILE}：这个包没说自己怎么被评估` };
   }
   const command = manifest.kind === 'ok' ? manifest.manifest.command : (project.eval_command?.trim() ?? '');
   const source = manifest.kind === 'ok' ? 'snapshot' : 'project';
@@ -264,13 +262,33 @@ export async function dispatchEvaluation(env: Env, project: ProjectRow, run: Run
     command,
   });
 
-  const dispatched = await dispatchShell(env, caller, device.address, script, {
-    timeoutSeconds,
-    ttlSeconds: timeoutSeconds,
+  return { ok: true, script, timeoutSeconds, command, source, device };
+}
+
+/** 派一次评估。成功就把绑定信息落到 run 上；失败按次数记账，够次数就认账。 */
+export async function dispatchEvaluation(env: Env, project: ProjectRow, run: RunRow): Promise<void> {
+  const prepared = await prepareEval(env, project, run);
+  if (!prepared.ok) {
+    if (prepared.kind === 'dirty') {
+      await markDirty(env, project, run, prepared.message);
+      return;
+    }
+    if (prepared.kind === 'no-device') {
+      await env.DB.prepare(`UPDATE runs SET eval_error = ? WHERE id = ? AND eval_call_id IS NULL`).bind(prepared.message, run.id).run();
+      return;
+    }
+    await settleRejected(env, project, run, prepared.message);
+    return;
+  }
+
+  const caller = await identityOf(env, await ensureIdentity(env, project.owner_user_id));
+  const dispatched = await dispatchShell(env, caller, prepared.device.address, prepared.script, {
+    timeoutSeconds: prepared.timeoutSeconds,
+    ttlSeconds: prepared.timeoutSeconds,
   });
 
   if (dispatched.rejected) {
-    await recordFailure(env, project, run, `评估命令没派出去（${dispatched.rejected.status}）：${dispatched.rejected.message}`, device);
+    await recordFailure(env, project, run, `评估命令没派出去（${dispatched.rejected.status}）：${dispatched.rejected.message}`, prepared.device);
     return;
   }
 
@@ -278,14 +296,14 @@ export async function dispatchEvaluation(env: Env, project: ProjectRow, run: Run
     `UPDATE runs SET eval_call_id = ?, eval_device_address = ?, eval_expires_at = ?, eval_dispatched_at = ?,
        eval_attempts = eval_attempts + 1, eval_error = NULL, eval_command = ?, eval_command_source = ? WHERE id = ?`,
   )
-    .bind(dispatched.call.call_id, device.address, dispatched.call.expires_at, createdAt, command, source, run.id)
+    .bind(dispatched.call.call_id, prepared.device.address, dispatched.call.expires_at, nowSeconds(), prepared.command, prepared.source, run.id)
     .run();
   await recordEvent(env, EVAL_EVENTS.dispatched, project.id, null, {
     run_id: run.id,
-    device_id: device.id,
+    device_id: prepared.device.id,
     call_id: dispatched.call.call_id,
     lab: labLabel(run.lab_no),
-    command_source: source,
+    command_source: prepared.source,
   });
 }
 

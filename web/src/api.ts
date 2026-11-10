@@ -158,6 +158,13 @@ export interface RunView {
     command_source: string | null;
     /** 合规的评估树：补规范补出来的那一份，空表示就用这一轮的输入。 */
     snapshot_id: string | null;
+    /** 复算：把这一轮重算一遍之后的核对结果。 */
+    recheck: {
+      state: 'queued' | 'dispatched' | 'matched' | 'diverged' | 'failed';
+      at: number | null;
+      metrics: Record<string, unknown> | null;
+      diffs: { key: string; expected: number | null; actual: number | null }[];
+    } | null;
   };
 }
 
@@ -536,5 +543,12 @@ export function useSaveProjectSettings(sdk: SdkLike | null, slug: string | undef
         `/api/v1/projects/${slug}/settings`,
         { method: 'POST', body: JSON.stringify(patch) },
       ),
+  });
+}
+
+/** 一键复算：把这条实验线上所有已结算的实验重算一遍，只核对、不改数字。 */
+export function useRecheckAll(sdk: SdkLike | null, slug: string | undefined) {
+  return useMutation({
+    mutationFn: () => api<{ queued: number }>(sdk as SdkLike, `/api/v1/projects/${slug}/recheck`, { method: 'POST' }),
   });
 }
