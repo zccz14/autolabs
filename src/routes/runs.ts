@@ -448,7 +448,13 @@ runRoutes.post('/:runId/repaired', async (c) => {
       .run();
   } else {
     // 已经结算：代码一个字不动，只挂一份能复算的评估树。
-    await c.env.DB.prepare(`UPDATE runs SET eval_snapshot_id = ? WHERE id = ?`).bind(snapshot.id, run.id).run();
+    await c.env.DB.prepare(
+      `UPDATE runs SET eval_snapshot_id = ?, dirty_reason = NULL,
+         recheck_state = CASE WHEN recheck_state = 'failed' THEN 'queued' ELSE recheck_state END
+       WHERE id = ?`,
+    )
+      .bind(snapshot.id, run.id)
+      .run();
   }
   await recordEvent(c.env, 'run.repaired', access.project.id, principal?.userId ?? null, {
     run_id: run.id,

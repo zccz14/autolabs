@@ -20,6 +20,7 @@ import {
   type SnapshotRow,
 } from '../store';
 import { mintProjectToken } from '../tokens';
+import { compareMetrics, queueRecheck } from '../recheck';
 
 const routes = new Hono<{ Bindings: Env }>();
 
@@ -91,6 +92,17 @@ export function viewRun(run: RunRow) {
       command: run.eval_command,
       command_source: run.eval_command_source,
       snapshot_id: run.eval_snapshot_id,
+      recheck: run.recheck_state
+        ? {
+            state: run.recheck_state,
+            at: run.recheck_at,
+            metrics: run.recheck_metrics_json ? JSON.parse(run.recheck_metrics_json) : null,
+            diffs:
+              run.recheck_metrics_json && run.metrics_json
+                ? compareMetrics(JSON.parse(run.metrics_json), JSON.parse(run.recheck_metrics_json)).diffs
+                : [],
+          }
+        : null,
     },
   };
 }
@@ -249,6 +261,19 @@ routes.post('/:slug/settings', async (c) => {
     eval_command: updated?.eval_command ?? null,
     eval_device_id: updated?.eval_device_id ?? null,
   });
+});
+
+/**
+ * 一键复算：把这个项目里所有已结算的实验排进复算队列。
+ *
+ * 它不改任何已经记下的数字——那是事实。复算只产出一份核对结果。失败的行会被
+ * 标 dirty，走已有的修复通道。
+ */
+routes.post('/:slug/recheck', async (c) => {
+  const principal = await authenticate(c.req.raw, c.env);
+  const access = await loadProject(c.env, c.req.param('slug'), principal, 'maintainer', 'write');
+  const queued = await queueRecheck(c.env, access.project);
+  return c.json({ queued });
 });
 
 routes.get('/:slug/tokens', async (c) => {

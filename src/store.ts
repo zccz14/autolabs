@@ -93,6 +93,14 @@ export interface RunRow {
   repair_attempts: number;
   repair_thread_id: string | null;
   repair_last_at: number | null;
+  /** 复算：把已结算的实验重算一遍，只核对、不改数字。 */
+  recheck_state: string | null;
+  recheck_call_id: string | null;
+  recheck_device_address: string | null;
+  recheck_expires_at: number | null;
+  recheck_metrics_json: string | null;
+  recheck_attempts: number;
+  recheck_at: number | null;
 }
 
 const ROLE_RANK: Record<Role, number> = { reader: 1, runner: 2, maintainer: 3, owner: 4 };
