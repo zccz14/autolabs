@@ -90,6 +90,7 @@ export function viewRun(run: RunRow) {
       error: run.eval_error,
       command: run.eval_command,
       command_source: run.eval_command_source,
+      snapshot_id: run.eval_snapshot_id,
     },
   };
 }

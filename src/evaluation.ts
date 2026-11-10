@@ -209,7 +209,7 @@ export async function dispatchEvaluation(env: Env, project: ProjectRow, run: Run
     return;
   }
 
-  const snapshot = await findSnapshot(env, run.input_snapshot_id);
+  const snapshot = await findSnapshot(env, run.eval_snapshot_id ?? run.input_snapshot_id);
   if (!snapshot) {
     await settleRejected(env, project, run, '输入快照不见了，这一轮无法评估');
     return;

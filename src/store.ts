@@ -86,6 +86,8 @@ export interface RunRow {
   /** 这一轮实际跑了哪条命令、它来自快照里的 lab.json 还是项目设置。 */
   eval_command: string | null;
   eval_command_source: string | null;
+  /** 合规的评估树：补规范补出来的那一份。空表示用 input_snapshot_id。 */
+  eval_snapshot_id: string | null;
   /** 非空 = 这个包不符合规范、算不出指标，等着被修。 */
   dirty_reason: string | null;
   repair_attempts: number;
