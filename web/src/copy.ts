@@ -88,6 +88,10 @@ export const COPY = {
   'eval.waiting': { zh: '等评估器算出指标…', en: 'Waiting for the evaluator…' },
   'eval.done': { zh: '这一轮的指标已经算出来了。', en: 'This run has its metrics.' },
   'eval.none': { zh: '这一轮还没有指标。', en: 'This run has no metrics yet.' },
+  'eval.rejected': {
+    zh: '这一轮没有进榜单：原因见上面的门禁。下面是评估器交回来的原始数字，只作证据。',
+    en: 'This run did not make the leaderboard: see the gates above. The raw numbers below are evidence only.',
+  },
   'eval.attempts': { zh: '尝试', en: 'attempts' },
   'eval.fromSnapshot': { zh: '命令来自快照里的 lab.json', en: 'Command from lab.json in the snapshot' },
   'eval.fromProject': { zh: '命令来自项目设置', en: 'Command from project settings' },
