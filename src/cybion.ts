@@ -120,7 +120,7 @@ export async function createThread(
 ): Promise<CybionThread> {
   return call<CybionThread>(env, {
     method: 'POST',
-    path: '/v1/threads',
+    path: '/api/threads',
     authorization: `Bearer ${apiKey}`,
     // model 不传就用这个人在 Cybion 里的默认值。
     body: { title: input.title, external_ref: input.externalRef, ...(input.model ? { model: input.model } : {}) },
@@ -131,7 +131,7 @@ export async function createThread(
 export async function readThreadResponse(env: Env, apiKey: string, threadId: string): Promise<ThreadResponse | null> {
   return call<ThreadResponse | null>(env, {
     method: 'GET',
-    path: `/v1/threads/${encodeURIComponent(threadId)}/response`,
+    path: `/api/threads/${encodeURIComponent(threadId)}/response`,
     authorization: `Bearer ${apiKey}`,
   });
 }
@@ -146,7 +146,7 @@ export interface CybionRequest {
 export async function sendInput(env: Env, apiKey: string, threadId: string, input: string): Promise<CybionRequest> {
   return call<CybionRequest>(env, {
     method: 'POST',
-    path: `/v1/threads/${encodeURIComponent(threadId)}/inputs`,
+    path: `/api/threads/${encodeURIComponent(threadId)}/inputs`,
     authorization: `Bearer ${apiKey}`,
     body: { input },
   });

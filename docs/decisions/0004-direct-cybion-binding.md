@@ -10,8 +10,8 @@
 
 ## 决定
 
-1. 每个人在 AutoLabs 里换一把自己的 Cybion API key（工作台 →「Cybion 凭据」），AutoLabs 密封存下来；开 run 时用开 run 那个人的 key 在服务端直接 `POST /v1/threads` 建 Thread，`external_ref = autolabs:<slug>:<lab-000N>`。没换过的人回退到 Worker secret 里的服务级 `CYBION_API_KEY`。
-2. 建完 Thread 立刻签发一把只覆盖 `read/write/verdict`、30 天到期的项目凭据，把「要验什么、文件在哪、指标口径、结论往哪报」写成第一条输入 `POST /v1/threads/{id}/inputs`。Thread 从这一步才真正开始跑。
+1. 每个人在 AutoLabs 里换一把自己的 Cybion API key（工作台 →「Cybion 凭据」），AutoLabs 密封存下来；开 run 时用开 run 那个人的 key 在服务端直接 `POST /api/threads` 建 Thread，`external_ref = autolabs:<slug>:<lab-000N>`。没换过的人回退到 Worker secret 里的服务级 `CYBION_API_KEY`。
+2. 建完 Thread 立刻签发一把只覆盖 `read/write/verdict`、30 天到期的项目凭据，把「要验什么、文件在哪、指标口径、结论往哪报」写成第一条输入 `POST /api/threads/{id}/inputs`。Thread 从这一步才真正开始跑。
 3. Thread id 一建出来就先落库；首条输入失败时 run 留在 `proposed`，重试复用这个 Thread。`external_ref` 在 Cybion 侧不做唯一性约束，重复开 Thread 只能靠 AutoLabs 自己挡。
 4. `POST /api/v1/runs/{id}/dispatch` 保留为「重发 / 换绑」入口，不再是人手贴 id 的主路径。
 
