@@ -29,7 +29,7 @@ describe('Cybion 外部集成面', () => {
 
     expect(thread.id).toBe('thr_1');
     const [url, init] = spy.mock.calls[0]!;
-    expect(String(url)).toBe('https://cybion.test/v1/threads');
+    expect(String(url)).toBe('https://cybion.test/api/threads');
     expect(init!.method).toBe('POST');
     expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer cyb_user_secret');
     expect(JSON.parse(init!.body as string)).toEqual({
@@ -48,13 +48,13 @@ describe('Cybion 外部集成面', () => {
     expect(JSON.parse(withoutModel.mock.calls[0]![1]!.body as string)).toEqual({ title: 't', external_ref: 'r' });
   });
 
-  it('首条输入走 /v1/threads/{id}/inputs', async () => {
+  it('首条输入走 /api/threads/{id}/inputs', async () => {
     const spy = stubFetch(new Response(JSON.stringify({ thread_id: 'thr_1', record_idx: 3, status: 'queued' }), { status: 200 }));
 
     await sendInput(env, 'cyb_user_secret', 'thr_1', '# lab-0001');
 
     const [url, init] = spy.mock.calls[0]!;
-    expect(String(url)).toBe('https://cybion.test/v1/threads/thr_1/inputs');
+    expect(String(url)).toBe('https://cybion.test/api/threads/thr_1/inputs');
     expect(JSON.parse(init!.body as string)).toEqual({ input: '# lab-0001' });
   });
 
