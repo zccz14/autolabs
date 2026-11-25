@@ -22,6 +22,8 @@ import {
 import { mintProjectToken } from '../tokens';
 import { compareMetrics, countSettledRuns, planRecheck, queueRecheck } from '../recheck';
 import { findEvalDevice } from '../evaluation';
+import { CybionError, listThreadPresets, type CybionThreadPreset } from '../cybion';
+import { callerOf, withCybionKey } from '../credentials';
 
 const routes = new Hono<{ Bindings: Env }>();
 
@@ -41,7 +43,7 @@ function viewProject(access: Access, extra: Record<string, unknown> = {}) {
     sota_run_id: project.sota_run_id,
     rules_snapshot_id: project.rules_snapshot_id,
     dataset_pin_id: project.dataset_pin_id,
-    run_model: project.run_model,
+    run_preset: project.run_preset,
     loop_state: project.loop_state,
     loop_run_id: project.loop_run_id,
     loop_error: project.loop_error,
@@ -208,10 +210,34 @@ routes.post('/:slug/tokens', async (c) => {
   return c.json({ token: minted.token, id: minted.id, capabilities, expires_in_days: days }, 201);
 });
 
-/** 项目级设置：现在只有「跑实验用哪个模型」，空字符串表示跟随 Cybion 默认。 */
+/**
+ * 这个人 Cybion 账号里存过的线程预设，读法只有一种：他自己的长寿命 key。
+ *
+ * 预设是账号级的快照，所以「谁能用哪条预设」取决于开 Thread 的人是谁——界面给
+ * 人挑的、保存时核对存在的，都是他自己看得见的那几条。
+ */
+async function presetsOf(
+  env: Env,
+  request: Request,
+  principal: { userId: string; kind: 'user' | 'token' | 'thread' },
+): Promise<CybionThreadPreset[]> {
+  return withCybionKey(env, principal.userId, callerOf(request, principal), (apiKey) => listThreadPresets(env, apiKey));
+}
+
+/** 这些预设能用哪一条：名字、模型、档位，够界面摆一排按钮了。 */
+function viewPreset(preset: CybionThreadPreset) {
+  return {
+    name: preset.name,
+    use_when: preset.use_when ?? '',
+    thread_count: preset.thread_count ?? 0,
+    model: preset.settings?.model ?? '',
+    reasoning_effort: preset.settings?.reasoning_effort ?? '',
+  };
+}
+
 /**
  * 项目级设置。三样东西各管一段：
- *   run_model      —— 跑实验的 Thread 用哪个模型（执行体的事）；
+ *   run_preset     —— 跑实验的 Thread 从哪个线程预设起步（执行体的事）；
  *   eval_command   —— 指标怎么算（评估器的事，一条命令）；
  *   eval_device_id —— 这条命令在哪台机器上跑（用户自己的设备）。
  * 这些都是「只传什么改什么」：界面保存一块，不该顺手把别的块清零。
@@ -224,11 +250,28 @@ routes.post('/:slug/settings', async (c) => {
   const binds: unknown[] = [];
   const event: Record<string, unknown> = {};
 
-  if ('run_model' in payload) {
-    const raw = optionalString(payload.run_model, 'run_model', 120)?.trim() ?? '';
-    sets.push('run_model = ?');
+  if ('run_preset' in payload) {
+    const raw = optionalString(payload.run_preset, 'run_preset', 120)?.trim() ?? '';
+    if (raw) {
+      // 名字写错的代价是「直到开实验那一刻才发现这一轮起不来」，所以在保存这一刻
+      // 就去 Cybion 问一遍：这条预设还在不在。读不到就当场说读不到，别默许一个
+      // 谁也没核对过的名字。
+      let presets: CybionThreadPreset[] | null = null;
+      try {
+        presets = await presetsOf(c.env, c.req.raw, principal);
+      } catch (error) {
+        if (!(error instanceof CybionError)) throw error;
+        return fail(502, 'cybion_error', `现在读不到 Cybion 上的线程预设：${error.message}`);
+      }
+      const names = presets.map((preset) => preset.name);
+      if (!names.includes(raw)) {
+        return fail(400, 'unknown_preset', `你的 Cybion 账号里没有叫 ${raw} 的线程预设；现有的是：${names.join('、')}`);
+      }
+    }
+    // 空 = 跟随 Cybion 的账户默认，和以前一样。
+    sets.push('run_preset = ?');
     binds.push(raw || null);
-    event.run_model = raw || null;
+    event.run_preset = raw || null;
   }
 
   if ('eval_command' in payload) {
@@ -258,10 +301,28 @@ routes.post('/:slug/settings', async (c) => {
   await recordEvent(c.env, 'project.settings', access.project.id, principal.userId, event);
   const updated = await findProjectBySlug(c.env, access.project.slug);
   return c.json({
-    run_model: updated?.run_model ?? null,
+    run_preset: updated?.run_preset ?? null,
     eval_command: updated?.eval_command ?? null,
     eval_device_id: updated?.eval_device_id ?? null,
   });
+});
+
+/**
+ * 实验 Thread 能照哪些预设开：这个人在 Cybion 里的那几条。
+ *
+ * 界面靠它摆选项，所以这里只读不写；真正开 Thread 时会再用一次预设名，那一次
+ * 由 Cybion 自己判定名字还作不作数。
+ */
+routes.get('/:slug/thread-presets', async (c) => {
+  const principal = await authenticate(c.req.raw, c.env);
+  await loadProject(c.env, c.req.param('slug'), principal, 'runner', 'read');
+  try {
+    const presets = await presetsOf(c.env, c.req.raw, principal);
+    return c.json({ presets: presets.map(viewPreset) });
+  } catch (error) {
+    if (error instanceof CybionError) return fail(502, 'cybion_error', error.message);
+    throw error;
+  }
 });
 
 /**

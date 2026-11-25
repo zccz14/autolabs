@@ -106,6 +106,20 @@ export const COPY = {
   'recheck.matched': { zh: '复算一致', en: 'Recheck matched' },
   'recheck.diverged': { zh: '复算不一致', en: 'Recheck diverged' },
   'recheck.failed': { zh: '复算失败', en: 'Recheck failed' },
+  'project.runPreset': { zh: '实验预设', en: 'Run preset' },
+  'project.runPresetDefault': { zh: '跟随 Cybion 默认', en: 'Follow Cybion default' },
+  'project.runPresetHint': {
+    zh: '实验 Thread 照这条 Cybion 线程预设开：模型、推理档位、初始手册、预算一起钉在那条 Thread 上。',
+    en: 'The experiment Thread starts from this Cybion thread preset: model, reasoning effort, initial Manuals and budget are pinned onto it together.',
+  },
+  'project.runPresetEmpty': {
+    zh: 'Cybion 里还没有线程预设：先去 Cybion 存一条，这里才有得选。',
+    en: 'No thread presets in Cybion yet — save one there first, then it shows up here.',
+  },
+  'project.runPresetMissing': {
+    zh: '这条预设已经不在你的 Cybion 账号里了：换一条再保存，否则这一轮开不出 Thread。',
+    en: 'This preset is no longer in your Cybion account — pick another, or runs cannot start.',
+  },
   'project.evalTitle': { zh: '评估入口', en: 'Evaluation entry' },
   'project.evalHint': {
     zh: '一条命令，在你选的设备上跑。它会拿到 AUTOLABS_SNAPSHOT_URL、AUTOLABS_TOKEN、AUTOLABS_DATASET 和 AUTOLABS_METRICS，最后一行打印 {"metrics": {"<key>": <number>}}。',

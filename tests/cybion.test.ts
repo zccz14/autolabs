@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CybionError, createThread, mintApiKey, revokeApiKey, sendInput } from '../src/cybion';
+import { CybionError, createThread, listThreadPresets, mintApiKey, revokeApiKey, sendInput } from '../src/cybion';
 import type { Env } from '../src/env';
 
 const env = {
@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe('Cybion 外部集成面', () => {
-  it('开 Thread 只发 title 与 external_ref，模型交给 Cybion 自己的默认值', async () => {
+  it('开 Thread 只发 title 与 external_ref，设置交给 Cybion 自己的默认值', async () => {
     const spy = stubFetch(
       new Response(JSON.stringify({ id: 'thr_1', external_ref: 'autolabs:q-labs:lab-0083', status: 'idle' }), {
         status: 200,
@@ -38,14 +38,47 @@ describe('Cybion 外部集成面', () => {
     });
   });
 
-  it('项目指定了模型就带上，没指定就不带（交给 Cybion 默认）', async () => {
-    const withModel = stubFetch(new Response(JSON.stringify({ id: 'thr_1' }), { status: 200 }));
-    await createThread(env, 'k', { externalRef: 'r', title: 't', model: 'deepseek-flash' });
-    expect(JSON.parse(withModel.mock.calls[0]![1]!.body as string)).toEqual({ title: 't', external_ref: 'r', model: 'deepseek-flash' });
+  it('项目选了线程预设就带上，没选就不带（交给 Cybion 的账户默认）', async () => {
+    const withPreset = stubFetch(new Response(JSON.stringify({ id: 'thr_1' }), { status: 200 }));
+    await createThread(env, 'k', { externalRef: 'r', title: 't', preset: 'coder' });
+    expect(JSON.parse(withPreset.mock.calls[0]![1]!.body as string)).toEqual({ title: 't', external_ref: 'r', preset: 'coder' });
 
-    const withoutModel = stubFetch(new Response(JSON.stringify({ id: 'thr_2' }), { status: 200 }));
-    await createThread(env, 'k', { externalRef: 'r', title: 't', model: null });
-    expect(JSON.parse(withoutModel.mock.calls[0]![1]!.body as string)).toEqual({ title: 't', external_ref: 'r' });
+    const withoutPreset = stubFetch(new Response(JSON.stringify({ id: 'thr_2' }), { status: 200 }));
+    await createThread(env, 'k', { externalRef: 'r', title: 't', preset: null });
+    expect(JSON.parse(withoutPreset.mock.calls[0]![1]!.body as string)).toEqual({ title: 't', external_ref: 'r' });
+  });
+
+  it('预设名只说一次，不把模型再带上：设置整份由预设钉住', async () => {
+    const spy = stubFetch(new Response(JSON.stringify({ id: 'thr_1' }), { status: 200 }));
+    await createThread(env, 'k', { externalRef: 'r', title: 't', preset: 'researcher' });
+    const body = JSON.parse(spy.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('model');
+    expect(body).not.toHaveProperty('initial_manual_ids');
+  });
+
+  it('读一个人的线程预设：GET /api/thread-presets，用他自己的 key', async () => {
+    const spy = stubFetch(
+      new Response(
+        JSON.stringify([
+          {
+            name: 'coder',
+            use_when: '编写代码的工程',
+            thread_count: 19,
+            settings: { model: 'deepseek-v4.1-flash', reasoning_effort: 'max', initial_manual_ids: ['m1'] },
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+
+    const presets = await listThreadPresets(env, 'cyb_user_secret');
+
+    expect(presets).toHaveLength(1);
+    expect(presets[0]?.name).toBe('coder');
+    expect(presets[0]?.settings.model).toBe('deepseek-v4.1-flash');
+    const [url, init] = spy.mock.calls[0]!;
+    expect(String(url)).toBe('https://cybion.test/api/thread-presets');
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer cyb_user_secret');
   });
 
   it('首条输入走 /api/threads/{id}/inputs', async () => {
