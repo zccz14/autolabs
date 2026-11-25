@@ -214,7 +214,8 @@ async function startRepairThread(env: Env, project: ProjectRow, run: RunRow, att
         // 和这一轮的执行体分开：修复有它自己的目标，不该混进原来那段对话。
         externalRef: `${run.external_ref}:repair`,
         title: `修复 ${labLabel(run.lab_no)} · ${project.name}`,
-        model: project.run_model,
+        // 和这一轮同一条预设：修的是同一个包，用的也该是同一套设置。
+        preset: project.run_preset,
       });
       threadId = thread.id;
       await env.DB.prepare(`UPDATE runs SET repair_thread_id = ? WHERE id = ?`).bind(threadId, run.id).run();

@@ -64,8 +64,8 @@ export interface ProjectSummary {
   owner_user_id: string;
   created_at: number;
   role: string;
-  /** 跑实验的 Thread 用哪个模型；空表示跟随 Cybion 默认。 */
-  run_model?: string | null;
+  /** 跑实验的 Thread 从哪个线程预设起步；空表示跟随 Cybion 的账户默认。 */
+  run_preset?: string | null;
   /** 算指标的评估入口：一条命令，最后一行打印 {"metrics": {...}}。 */
   eval_command?: string | null;
   /** 评估跑在哪台设备上（devices.id）。 */
@@ -448,14 +448,26 @@ export function useLoopControl(sdk: SdkLike | null, slug: string | undefined) {
   });
 }
 
-/** 项目级设置：跑实验用哪个模型（空 = 跟随 Cybion 默认）。 */
-export function useSaveRunModel(sdk: SdkLike | null, slug: string | undefined) {
-  return useMutation({
-    mutationFn: (runModel: string) =>
-      api<{ run_model: string | null }>(sdk as SdkLike, `/api/v1/projects/${slug}/settings`, {
-        method: 'POST',
-        body: JSON.stringify({ run_model: runModel }),
-      }),
+/** 一条线程预设：一份设置快照，外加点明「什么时候该用它」。 */
+export interface ThreadPresetView {
+  name: string;
+  use_when: string;
+  thread_count: number;
+  model: string;
+  reasoning_effort: string;
+}
+
+/**
+ * 实验 Thread 能照哪些预设开：这个人在 Cybion 里存过的那些。
+ *
+ * 预设是账号级的，所以这份列表永远只反映当前登录的人在 Cybion 上的样子——换个人
+ * 看，看到的就是另一个人的预设。
+ */
+export function useThreadPresets(sdk: SdkLike | null, slug: string | undefined) {
+  return useQuery({
+    queryKey: ['thread-presets', slug],
+    enabled: Boolean(sdk) && Boolean(slug),
+    queryFn: ({ signal }) => api<{ presets: ThreadPresetView[] }>(sdk as SdkLike, `/api/v1/projects/${slug}/thread-presets`, { signal }),
   });
 }
 
@@ -537,8 +549,8 @@ export function useDeleteDevice(sdk: SdkLike | null) {
 /** 项目级设置：只传要改的那一块，别顺手把别的块清零。 */
 export function useSaveProjectSettings(sdk: SdkLike | null, slug: string | undefined) {
   return useMutation({
-    mutationFn: (patch: { run_model?: string; eval_command?: string; eval_device_id?: string }) =>
-      api<{ run_model: string | null; eval_command: string | null; eval_device_id: string | null }>(
+    mutationFn: (patch: { run_preset?: string; eval_command?: string; eval_device_id?: string }) =>
+      api<{ run_preset: string | null; eval_command: string | null; eval_device_id: string | null }>(
         sdk as SdkLike,
         `/api/v1/projects/${slug}/settings`,
         { method: 'POST', body: JSON.stringify(patch) },

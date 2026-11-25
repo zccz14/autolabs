@@ -109,22 +109,51 @@ export interface CybionThread {
 }
 
 /**
- * 开一个 Thread。模型、上游、推理档位都不传：Cybion 会用这个用户自己的默认值，
- * 与他在界面里新开一个 Thread 得到的东西一致。external_ref 是给人看的集成标记，
- * Cybion 不拿它去重。
+ * 开一个 Thread。
+ *
+ * 只有预设名（`preset`）与标题、external_ref 是我们说的话：模型、推理档位、初始
+ * 手册、预算全由那条预设一起钉上来。不传预设就跟随这个人 Cybion 的账户默认。
+ * external_ref 是给人看的集成标记，Cybion 不拿它去重。
  */
 export async function createThread(
   env: Env,
   apiKey: string,
-  input: { externalRef: string; title: string; model?: string | null },
+  input: { externalRef: string; title: string; preset?: string | null },
 ): Promise<CybionThread> {
   return call<CybionThread>(env, {
     method: 'POST',
     path: '/api/threads',
     authorization: `Bearer ${apiKey}`,
-    // model 不传就用这个人在 Cybion 里的默认值。
-    body: { title: input.title, external_ref: input.externalRef, ...(input.model ? { model: input.model } : {}) },
+    body: { title: input.title, external_ref: input.externalRef, ...(input.preset ? { preset: input.preset } : {}) },
   });
+}
+
+/** Cybion 里一条线程预设：一份设置快照，外加「什么时候该用它」。 */
+export interface CybionThreadPreset {
+  name: string;
+  use_when: string;
+  thread_count: number;
+  settings: {
+    model: string;
+    reasoning_effort: string;
+    initial_manual_ids?: string[];
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * 这个人在 Cybion 里存过的线程预设。
+ *
+ * 预设是账号级的：开出来的 Thread 跑的是「创建那条 Thread 的人」的预设，所以这份
+ * 列表只能拿那个人的 key 去读——界面上给人挑的，也正是他自己看得见的那几条。
+ */
+export async function listThreadPresets(env: Env, apiKey: string): Promise<CybionThreadPreset[]> {
+  const presets = await call<CybionThreadPreset[]>(env, {
+    method: 'GET',
+    path: '/api/thread-presets',
+    authorization: `Bearer ${apiKey}`,
+  });
+  return Array.isArray(presets) ? presets : [];
 }
 
 /** 读这条 Thread 对「最近一条输入」的回复；还没开始回就是 null。 */

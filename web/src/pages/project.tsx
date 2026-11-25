@@ -22,8 +22,8 @@ import {
   useDevices,
   useRecheckAll,
   useSaveProjectSettings,
-  useSaveRunModel,
   useStartIdea,
+  useThreadPresets,
   type SdkLike,
 } from '../api';
 import { formatMetricValue } from '../metrics-format';
@@ -210,8 +210,8 @@ export function ProjectPage() {
       {recheckNote ? <p className="text-xs text-muted-foreground">{recheckNote}</p> : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">实验模型</span>
-        <RunModelSetting sdk={typed} slug={slug} current={project?.run_model ?? ''} onSaved={() => detail.refetch()} />
+        <span className="text-xs text-muted-foreground">{t('project.runPreset')}</span>
+        <RunPresetSetting sdk={typed} slug={slug} current={project?.run_preset ?? ''} onSaved={() => detail.refetch()} />
       </div>
 
       <EvaluationSetting
@@ -572,7 +572,14 @@ function Stat({ label, value, mono }: { label: string; value: string; mono?: boo
 }
 
 /** 项目级「跑实验用哪个模型」：空就是跟随这个人在 Cybion 里的默认值。 */
-function RunModelSetting({
+/**
+ * 实验预设：这一轮实验的 Thread 照 Cybion 里的哪条线程预设开。
+ *
+ * 选的是一条预设，不是一个模型：模型、推理档位、初始手册、预算都在预设里配好，
+ * 开出去的 Thread 拿到的是那份快照，这里不必也不该再逐项填一遍。选项来自当前登录
+ * 的人在 Cybion 上的预设——预设是账号级的东西，别人账号里的名字在这儿没有意义。
+ */
+function RunPresetSetting({
   sdk,
   slug,
   current,
@@ -583,34 +590,60 @@ function RunModelSetting({
   current: string;
   onSaved: () => void;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const save = useSaveRunModel(sdk, slug);
-  const shown = draft ?? current;
+  const t = useCopy();
+  const [choice, setChoice] = useState<string | null>(null);
+  const save = useSaveProjectSettings(sdk, slug);
+  const presets = useThreadPresets(sdk, slug);
+  const list = presets.data?.presets ?? [];
+  const shown = choice ?? current;
+  const picked = list.find((preset) => preset.name === shown) ?? null;
+  const missing = Boolean(current) && shown === current && !picked && !presets.isLoading;
   return (
-    <>
-      <Input
-        className="h-7 w-56 font-mono"
-        value={shown}
-        placeholder="跟随 Cybion 默认"
-        onChange={(event) => setDraft(event.target.value)}
-      />
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={save.isPending || shown === current}
-        onClick={() =>
-          save.mutate(shown, {
-            onSuccess: () => {
-              setDraft(null);
-              onSaved();
-            },
-          })
-        }
-      >
-        保存
-      </Button>
-      <ErrorNote error={save.error} />
-    </>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant={shown ? 'outline' : 'default'} onClick={() => setChoice('')}>
+          {t('project.runPresetDefault')}
+        </Button>
+        {list.map((preset) => (
+          <Button
+            key={preset.name}
+            size="sm"
+            variant={shown === preset.name ? 'default' : 'outline'}
+            title={preset.use_when}
+            onClick={() => setChoice(preset.name)}
+          >
+            {preset.name}
+          </Button>
+        ))}
+        <Button
+          size="sm"
+          disabled={save.isPending || shown === current}
+          onClick={() =>
+            save.mutate(
+              { run_preset: shown },
+              {
+                onSuccess: () => {
+                  setChoice(null);
+                  onSaved();
+                },
+              },
+            )
+          }
+        >
+          {t('action.save')}
+        </Button>
+      </div>
+      {picked ? (
+        <p className="text-xs text-muted-foreground">
+          {picked.use_when ? `${picked.use_when}｜` : ''}
+          {picked.model}
+          {picked.reasoning_effort ? ` · ${picked.reasoning_effort}` : ''}
+        </p>
+      ) : null}
+      {!presets.isLoading && list.length === 0 ? <p className="text-xs text-destructive">{t('project.runPresetEmpty')}</p> : null}
+      {missing ? <p className="text-xs text-destructive">{t('project.runPresetMissing')}</p> : null}
+      <ErrorNote error={presets.error ?? save.error} />
+    </div>
   );
 }
 
